@@ -1,5 +1,12 @@
 lockfileVersion: '9.0'
 
+{
+  "name": "your-project",
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.4", 
+  ...
+}
+
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
