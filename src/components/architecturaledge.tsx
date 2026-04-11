@@ -49,7 +49,7 @@ const ArchitecturalEdge = () => {
             
             {/* Background Image: Put your network/map image in /public folder */}
             <Image 
-              src="public/logisticsOperations.png" 
+              src="/logisticsOperations.png" 
               alt="Global Logistics Infrastructure"
               fill
               className="object-cover brightness-[0.4] grayscale-[0.2]"
