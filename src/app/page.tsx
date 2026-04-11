@@ -5,9 +5,7 @@ import Loader from "@/components/loader";
 import Nav from "@/components/nav";
 import Hero from "@/components/hero";
 import About from "@/components/about";
-import Capabilities from "@/components/capabilities";
-import CTA from "@/components/cta";
-import Footer from "@/components/footer";
+// ... other imports
 
 export default function LandingPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -19,22 +17,18 @@ export default function LandingPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  // 1. If loading, ONLY return the loader. 
-  // This prevents the Nav below from ever mounting.
+  // While true, the code below this block is never reached
   if (isLoading) {
     return <Loader />;
   }
 
-  // 2. Return the full UI only when loading is finished
   return (
-    <main className="min-h-screen bg-white font-sans selection:bg-blue-100">
-      <Nav />
-      <div className="pt-16 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+    <main className="min-h-screen bg-white">
+      <Nav /> {/* Nav only mounts once isLoading is false */}
+      <div className="pt-16">
         <Hero />
         <About />
-        <Capabilities />
-        <CTA />
-        <Footer />
+        {/* ... */}
       </div>
     </main>
   );
