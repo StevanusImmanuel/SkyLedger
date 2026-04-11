@@ -15,7 +15,7 @@ export default function LandingPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 100);
+    }, 3000);
     return () => clearTimeout(timer);
   }, []);
 
