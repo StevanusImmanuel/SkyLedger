@@ -1,3 +1,8 @@
+'use client';
+import React from 'react';
+import Link from 'next/link'; // Added Link import
+import AnimatedButton from './ui/animbutton'; 
+
 export default function Hero() {
   return (
     <section className="relative h-[90vh] min-h-[700px] flex items-center bg-slate-900 overflow-hidden">
@@ -13,7 +18,7 @@ export default function Hero() {
       <div className="container mx-auto px-10 relative z-20 grid lg:grid-cols-12 gap-12 items-center">
         {/* Text Content */}
         <div className="lg:col-span-7 space-y-8">
-          <span className="inline-block bg-[#1a2d5a] text-white text-[10px] font-black px-4 py-1.5 rounded-sm tracking-[0.2em] uppercase border border-white/10">
+          <span className="inline-block bg-[#1a2d5a] text-white text-[20px] font-black px-4 py-1.5 rounded-sm tracking-[0.2em] uppercase border border-white/10">
             The Architectural Ledger
           </span>
           <h1 className="text-6xl md:text-7xl font-black text-white leading-[1.05] tracking-tighter">
@@ -22,10 +27,17 @@ export default function Hero() {
           <p className="text-slate-200 text-lg max-w-md leading-relaxed">
             Transform your global logistics with the industry's most advanced digital ledger. We bring architectural precision to every flight path.
           </p>
-          <div className="flex flex-wrap gap-4 pt-4">
-            <button className="bg-white/10 backdrop-blur-md text-white px-10 py-4 rounded-sm font-black text-xs uppercase tracking-widest border border-white/20 hover:bg-white hover:text-[#1a2d5a] transition active:scale-95">
-              Track Your Cargo
-            </button>
+          
+          <div className="pt-4">
+            {/* WRAPPED WITH NEXT/LINK */}
+            <Link href="/tracking" className="inline-block">
+              <AnimatedButton 
+                  text="Track Your Cargo" 
+                  primaryColor="#ffffff" 
+                  hoverColor="#60a5fa"
+                  showArrow={true}
+              />
+            </Link>
           </div>
         </div>
 
@@ -40,7 +52,7 @@ export default function Hero() {
             </div>
           </div>
 
-          {/* MAIN TN METRIC WITH VISUAL INDICATOR */}
+          {/* MAIN TN METRIC */}
           <div className="mb-10">
             <div className="flex items-baseline gap-2">
               <div className="text-6xl font-black text-[#1a2d5a] tracking-tighter">
@@ -49,7 +61,6 @@ export default function Hero() {
               <span className="text-2xl font-bold text-slate-400">Tonnage</span>
             </div>
 
-            {/* Visual Indicator Line for Tonnage Capacity */}
             <div className="relative mt-5 h-2 w-full bg-slate-100 rounded-full overflow-hidden">
               <div 
                 className="absolute top-0 left-0 h-full bg-gradient-to-r from-[#1a2d5a] to-blue-500 rounded-full transition-all duration-1000 ease-out" 
@@ -67,9 +78,7 @@ export default function Hero() {
           <div className="grid grid-cols-2 gap-12 pt-8 border-t border-slate-100">
             <div className="space-y-4">
               <div>
-                <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                  In-Transit
-                </p>
+                <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1">In-Transit</p>
                 <p className="text-4xl font-black text-[#1a2d5a]">842</p>
               </div>
               <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
@@ -79,9 +88,7 @@ export default function Hero() {
 
             <div className="space-y-4">
               <div>
-                <p className="text-[11px] font-black text-blue-500 uppercase tracking-widest mb-1">
-                  Cleared
-                </p>
+                <p className="text-[11px] font-black text-blue-500 uppercase tracking-widest mb-1">Cleared</p>
                 <p className="text-4xl font-black text-blue-500">412</p>
               </div>
               <div className="h-1.5 w-full bg-blue-50 rounded-full overflow-hidden">

@@ -6,7 +6,7 @@ export default function Footer() {
         <div className="flex gap-10">
           <a href="#" className="hover:text-[#1a2d5a]">Privacy Policy</a>
           <a href="#" className="hover:text-[#1a2d5a]">Terms of Service</a>
-          <a href="#" className="hover:text-[#1a2d5a]">GSA Program</a>
+          <a href="#" className="hover:text-[#1a2d5a]">Linktree</a>
         </div>
       </div>
     </footer>
