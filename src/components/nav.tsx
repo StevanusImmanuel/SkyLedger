@@ -1,7 +1,7 @@
 'use client';
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation"; 
+import { usePathname } from "next/navigation"; // Hook to detect current route
 import AnimatedButton from "./ui/animbutton";
 import LoginButton from "./ui/loginbutton"; 
 
