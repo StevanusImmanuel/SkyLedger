@@ -19,14 +19,16 @@ export default function LandingPage() {
     return () => clearTimeout(timer);
   }, []);
 
+  // 1. If loading, ONLY return the loader. 
+  // This prevents the Nav below from ever mounting.
   if (isLoading) {
     return <Loader />;
   }
 
+  // 2. Return the full UI only when loading is finished
   return (
     <main className="min-h-screen bg-white font-sans selection:bg-blue-100">
       <Nav />
-      {/* pt-16 accounts for the fixed navbar height */}
       <div className="pt-16 animate-in fade-in slide-in-from-bottom-4 duration-1000">
         <Hero />
         <About />
