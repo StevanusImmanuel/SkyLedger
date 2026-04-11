@@ -1,10 +1,14 @@
+"use client";
+
 import React from 'react';
-import styles from './Loader.module.css';
+import styles from '@/components/loader.module.css';
 
 const Loader = () => {
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-white dark:bg-slate-950">
+    <div className="flex h-screen w-full flex-col items-center justify-center bg-[#E2E8F0] gap-4">
+      
       <div className={styles.loader} />
+      
     </div>
   );
 };

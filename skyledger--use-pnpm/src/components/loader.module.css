@@ -5,8 +5,9 @@
   white-space: pre;
   font-size: 30px;
   line-height: 1.2em;
-  height: 1.2em;
-  overflow: hidden;
+  height: 1.2em; 
+  overflow: hidden; 
+  color: #1E3A8A; 
 }
 
 .loader:before {
