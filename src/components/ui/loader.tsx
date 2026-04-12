@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import styles from '@/components/loader.module.css';
+import styles from "./loader.module.css"
 
 const Loader = () => {
   return (

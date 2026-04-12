@@ -1,5 +1,4 @@
-import Nav from "@/components/nav";
-
+import Nav from "@/components/landingpages/nav";
 export default function WebsiteLayout({ children }: { children: React.ReactNode }) {
   return (
     <>

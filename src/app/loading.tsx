@@ -1,7 +1,7 @@
-"use client"; 
+"use client";
 
 import React from 'react';
-import Loader from '@/components/loader'; 
+import Loader from '@/components/ui/loader';
 
 export default function Loading() {
   return (

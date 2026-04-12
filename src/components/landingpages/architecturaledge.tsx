@@ -47,11 +47,12 @@ const ArchitecturalEdge = () => {
         <div className="lg:w-1/2 relative w-full h-full">
           <div className="relative w-full aspect-video rounded-3xl overflow-hidden border-[6px] border-[#1a2d5a] shadow-[12px_12px_0px_0px_rgba(26,45,90,1)]">
             
-            {/* Background Image: Put your network/map image in /public folder */}
             <Image 
               src="/LogisticsOperations.png" 
               alt="Global Logistics Infrastructure"
               fill
+              // ADDED SIZES PROP BELOW
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 600px"
               className="object-cover brightness-[0.4] grayscale-[0.2]"
               priority
             />

@@ -1,7 +1,7 @@
 'use client';
 import React from 'react';
 import Link from 'next/link';
-import AnimatedButton from './ui/animbutton'; 
+import AnimatedButton from '../ui/animbutton';
 
 export default function About() {
   return (

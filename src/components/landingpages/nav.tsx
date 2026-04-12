@@ -1,9 +1,10 @@
 'use client';
+
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation"; // Hook to detect current route
-import AnimatedButton from "./ui/animbutton";
-import LoginButton from "./ui/loginbutton"; 
+import { usePathname } from "next/navigation"; 
+import AnimatedButton from "@/components/ui/animbutton";
+import LoginButton from "../ui/loginbutton"; 
 
 export default function Nav() {
   const pathname = usePathname();
@@ -12,11 +13,13 @@ export default function Nav() {
     <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-10 py-4 bg-white/90 backdrop-blur-md border-b border-gray-100">
       <div className="flex items-center gap-2">
         <Link href="/" className="flex items-center gap-2">
+          {/* w-12 is 48px, so we set sizes to 48px */}
           <div className="relative w-12 h-12"> 
             <Image 
               src="/SkyLedger no text logo-Photoroom.png" 
               alt="SkyLedger Logo"
               fill
+              sizes="48px" 
               className="object-contain"
               priority 
             />
@@ -34,8 +37,7 @@ export default function Nav() {
             primaryColor="#1a2d5a" 
             hoverColor="#60a5fa" 
             showArrow={false}
-            // Logic: Active if home or #
-            isActive={pathname === "/" || pathname === "#"} 
+            isActive={pathname === "/"} 
           />
         </Link>
 
@@ -61,6 +63,7 @@ export default function Nav() {
       </div>
 
       <Link href="/dashboard">
+        {/* Ensure LoginButton doesn't have a <button> inside or it will clash with <Link> */}
         <LoginButton />
       </Link>
     </nav>

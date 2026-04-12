@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Loader from "@/components/loader";
-import Nav from "@/components/nav";
-import Hero from "@/components/hero";
-import About from "@/components/about";
+import Loader from "@/components/ui/loader";
+import Nav from "@/components/landingpages/nav";
+import Hero from "@/components/landingpages/hero";
+import About from "@/components/landingpages/about";
 import Capabilities from "@/components/capabilities";
-import CTA from "@/components/cta";
-import Footer from "@/components/footer";
+import CTA from "@/components/landingpages/cta";
+import Footer from "@/components/landingpages/footer";
 
 export default function LandingPage() {
   const [isLoading, setIsLoading] = useState(true);

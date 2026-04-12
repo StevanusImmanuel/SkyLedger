@@ -1,8 +1,8 @@
 'use client';
 import React from 'react';
 import Link from 'next/link';
-import CtaPrimaryButton from './ui/ctaprimbutton';
-import AnimatedButton from './ui/animbutton';
+import CtaPrimaryButton from '../ui/ctaprimbutton';
+import AnimatedButton from '../ui/animbutton';
 
 export default function CTA() {
   return (

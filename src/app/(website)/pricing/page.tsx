@@ -1,8 +1,8 @@
 'use client';
 import React from 'react';
 import PricingCard from "@/components/ui/pricingcard";
-import ArchitecturalEdge from "@/components/architecturaledge";
-import Footer from "@/components/footer";
+import ArchitecturalEdge from "@/components/landingpages/architecturaledge";
+import Footer from "@/components/landingpages/footer";
 
 const pricingData = [
   {
@@ -45,10 +45,10 @@ export default function PricingPage() {
             Architecture of Scale
           </span>
           <h1 className="text-6xl font-black text-[#1a2d5a] tracking-tighter mb-6 leading-none">
-            Precision Pricing for <br/> Global Cargo.
+            Precision Pricing for <br /> Global Cargo.
           </h1>
           <p className="text-slate-500 max-w-2xl mx-auto font-semibold text-lg">
-            The Architectural Ledger provides transparent, tiered access to the world's 
+            The Architectural Ledger provides transparent, tiered access to the world's
             most advanced cargo logistics infrastructure.
           </p>
         </div>
