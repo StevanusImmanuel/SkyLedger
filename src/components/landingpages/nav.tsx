@@ -62,8 +62,7 @@ export default function Nav() {
         </Link>
       </div>
 
-      <Link href="/dashboard">
-        {/* Ensure LoginButton doesn't have a <button> inside or it will clash with <Link> */}
+      <Link href="/login/auth">
         <LoginButton />
       </Link>
     </nav>

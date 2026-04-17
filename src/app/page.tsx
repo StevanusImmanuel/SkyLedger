@@ -19,21 +19,21 @@ export default function LandingPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  if (isLoading) {
-    return <Loader />;
-  }
-
   return (
-    <main className="min-h-screen bg-white font-sans selection:bg-blue-100">
+    <main className="min-h-screen bg-white font-sans selection:bg-blue-100 overflow-x-hidden">
       <Nav />
-      {/* pt-16 accounts for the fixed navbar height */}
-      <div className="pt-16 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-        <Hero />
-        <About />
-        <Capabilities />
-        <CTA />
-        <Footer />
-      </div>
+
+      {isLoading ? (
+        <Loader />
+      ) : (
+        <div className="pt-16 animate-in fade-in duration-1000 ease-out">
+          <Hero />
+          <About />
+          <Capabilities />
+          <CTA />
+          <Footer />
+        </div>
+      )}
     </main>
   );
 }

@@ -2,13 +2,14 @@
 import React from 'react';
 import Link from 'next/link';
 import AnimatedButton from '../ui/animbutton';
+import { BlurText } from '../ui/dynamicanimationfonts';
 
 export default function Hero() {
   return (
     <section className="relative h-[90vh] min-h-[700px] flex items-center bg-slate-900 overflow-hidden">
       {/* BACKGROUND IMAGE LAYER */}
       <div className="absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/40 to-transparent z-10" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/60 to-transparent z-10" />
         <div 
           className="absolute inset-0 bg-[url('/LandingPagebg.png')] bg-cover bg-center opacity-70 scale-105"
           style={{ backgroundColor: '#1e293b' }} 
@@ -17,20 +18,49 @@ export default function Hero() {
 
       <div className="container mx-auto px-10 relative z-20 grid lg:grid-cols-12 gap-12 items-center">
         {/* Text Content */}
-        <div className="lg:col-span-7 space-y-8">
-          <span className="inline-block bg-[#1a2d5a] text-white text-[20px] font-black px-4 py-1.5 rounded-sm tracking-[0.2em] uppercase border border-white/10">
-            The Architectural Ledger
-          </span>
-          <h1 className="text-6xl md:text-7xl font-black text-white leading-[1.05] tracking-tighter">
-            Precision Cargo <br /> <span className="text-blue-400">Orchestration.</span>
-          </h1>
-          <p className="text-slate-200 text-lg max-w-md leading-relaxed">
-            Transform your global logistics with the industry's most advanced digital ledger. We bring architectural precision to every flight path.
-          </p>
+        <div className="lg:col-span-7 space-y-10">
+          <div className="min-h-[40px]">
+            <BlurText
+              text="The Architectural Ledger"
+              delay={40}
+              animateBy="letters"
+              className="inline-block bg-[#1a2d5a] text-white text-[18px] font-black px-5 py-2 rounded-sm tracking-[0.3em] uppercase border border-white/20 shadow-xl"
+            />
+          </div>
+
+          {/* Headline: Changed <h1> to <div> for hydration safety */}
+          <div className="space-y-2">
+            <div className="text-7xl md:text-8xl font-black text-white leading-[0.95] tracking-tighter">
+              <BlurText
+                text="Precision Cargo"
+                animateBy="letters"
+                delay={30}
+                className="block"
+                animationFrom={{ opacity: 0, filter: 'blur(10px)', transform: 'translate3d(0,20px,0)' }}
+                animationTo={[{ opacity: 1, filter: 'blur(0px)', transform: 'translate3d(0,0,0)' }]}
+              />
+              <BlurText
+                text="Orchestration."
+                animateBy="letters"
+                delay={40}
+                className="block text-blue-400"
+                animationFrom={{ opacity: 0, filter: 'blur(10px)', transform: 'translate3d(0,20px,0)' }}
+                animationTo={[{ opacity: 1, filter: 'blur(0px)', transform: 'translate3d(0,0,0)' }]}
+              />
+            </div>
+          </div>
+
+          {/* Subtext: Changed <p> to <div> for hydration safety */}
+          <div className="text-slate-200 text-xl md:text-2xl max-w-xl leading-relaxed font-medium">
+            <BlurText
+              text="Transform your global logistics with the industry's most advanced digital ledger. We bring architectural precision to every flight path."
+              animateBy="words"
+              delay={40}
+            />
+          </div>
           
-          <div className="pt-4">
-            {/* WRAPPED WITH NEXT/LINK */}
-            <Link href="/tracking" className="inline-block">
+          <div className="pt-6">
+            <Link href="/tracking" className="inline-block scale-125 origin-left transition-transform hover:scale-[1.3]">
               <AnimatedButton 
                   text="Track Your Cargo" 
                   primaryColor="#ffffff" 
@@ -41,7 +71,7 @@ export default function Hero() {
           </div>
         </div>
 
-        {/* FLOATING STATS CARD */}
+        {/* FLOATING STATS CARD (STRICTLY UNCHANGED) */}
         <div className="hidden lg:block lg:col-span-5 bg-white/95 backdrop-blur-xl p-10 rounded-2xl shadow-[0_35px_60px_-15px_rgba(0,0,0,0.6)] border border-white w-full max-w-xl ml-auto">
           <div className="flex justify-between items-center mb-8">
             <h3 className="font-bold text-slate-400 text-[11px] uppercase tracking-[0.2em]">
@@ -52,7 +82,6 @@ export default function Hero() {
             </div>
           </div>
 
-          {/* MAIN TN METRIC */}
           <div className="mb-10">
             <div className="flex items-baseline gap-2">
               <div className="text-6xl font-black text-[#1a2d5a] tracking-tighter">
@@ -74,7 +103,6 @@ export default function Hero() {
             </div>
           </div>
 
-          {/* BOTTOM STATS GRID */}
           <div className="grid grid-cols-2 gap-12 pt-8 border-t border-slate-100">
             <div className="space-y-4">
               <div>

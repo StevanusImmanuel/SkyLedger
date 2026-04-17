@@ -1,10 +1,16 @@
 import "./globals.css";
+import { Inter } from "next/font/google";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+const inter = Inter({ subsets: ["latin"] });
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
-      <body className="antialiased selection:bg-blue-100">
-        {/* Nav is removed from here so it doesn't stay stuck on the screen during loading */}
+      <body className={inter.className}>
         {children}
       </body>
     </html>
