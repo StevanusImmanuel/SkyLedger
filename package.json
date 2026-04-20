@@ -9,15 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@fortawesome/fontawesome-svg-core": "^7.2.0",
-    "@fortawesome/free-solid-svg-icons": "^7.2.0",
-    "@fortawesome/react-fontawesome": "^3.3.1",
     "@react-spring/web": "^10.0.3",
-    "fa-icon": "^0.0.0",
     "framer-motion": "^12.38.0",
-    "lucide-react": "^1.8.0",
     "next": "16.2.3",
-    "next-auth": "^4.24.14",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",

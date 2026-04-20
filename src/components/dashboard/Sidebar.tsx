@@ -1,142 +1,111 @@
 'use client';
-
-import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { signOut } from "next-auth/react";
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faChartPie, 
-  faBox, 
-  faFileLines, 
-  faGear, 
-  faRightFromBracket,
-  faChevronLeft,
-  faChevronRight 
-} from '@fortawesome/free-solid-svg-icons';
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: faChartPie },
-  { href: '/shipments', label: 'Shipments', icon: faBox },
-  { href: '/reports', label: 'Reports', icon: faFileLines },
-  { href: '/settings', label: 'Settings', icon: faGear },
+  {
+    href: '/dashboard',
+    label: 'Dashboard',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+      </svg>
+    ),
+  },
+  {
+    href: '/shipments',
+    label: 'Shipments',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="1" y="3" width="15" height="13" /><path d="M16 8h4l3 3v5h-7V8z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
+      </svg>
+    ),
+  },
+  {
+    href: '/reports',
+    label: 'Reports',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
+      </svg>
+    ),
+  },
+  {
+    href: '/settings',
+    label: 'Settings',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+    ),
+  },
+];
+
+const bottomItems = [
+  {
+    href: '#',
+    label: 'Support',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+    ),
+  },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  
-  // State for manual toggle (Locking the sidebar)
-  const [isLocked, setIsLocked] = useState(false);
-  // State for hover detection
-  const [isHovered, setIsHovered] = useState(false);
-
-  // The sidebar is effectively "Open" if it's either locked OR being hovered
-  const isOpen = isLocked || isHovered;
-
-  const handleSignOut = async () => {
-    await signOut({ callbackUrl: "/login/auth", redirect: true });
-  };
 
   return (
-    <aside 
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className={`
-        relative h-screen sticky top-0 border-r border-slate-200 bg-white flex flex-col
-        transition-[width] duration-300 ease-in-out z-40 shadow-sm
-        ${isOpen ? 'w-64' : 'w-20'}
-      `}
-    >
-      {/* Manual Toggle Button (Lock Sidebar) */}
-      <button 
-        onClick={(e) => {
-          e.stopPropagation(); // Prevent trigger hover logic
-          setIsLocked(!isLocked);
-        }}
-        className={`
-          absolute -right-3 top-10 bg-[#1a2d5a] text-white rounded-full w-6 h-6 
-          flex items-center justify-center border border-white z-50 
-          hover:scale-110 transition-all shadow-md
-          ${isLocked ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
-        `}
-      >
-        <FontAwesomeIcon icon={isLocked ? faChevronLeft : faChevronRight} size="xs" />
-      </button>
-
-      {/* Logo Section */}
-      <div className={`flex items-center p-4 mb-6 overflow-hidden ${!isOpen ? 'justify-center' : 'gap-3'}`}>
-        <div className="flex-shrink-0">
-          <Image 
-            src="/SkyLedger no text logo-Photoroom.png" 
-            width={28} 
-            height={28} 
-            alt="SkyLedger Logo" 
-          />
+    <aside className="sl-sidebar">
+      {/* Logo */}
+      <div className="sl-sidebar-logo">
+        <div className="sl-logo-icon">
+          <Image src="/SkyLedger no text logo-Photoroom.png" width={28} height={28} alt="SkyLedger" />
         </div>
-        <div className={`transition-all duration-300 ${!isOpen ? 'opacity-0 w-0' : 'opacity-100 w-auto'}`}>
-          {isOpen && (
-            <div className="whitespace-nowrap">
-              <span className="block font-bold text-[#1a2d5a]">SkyLedger</span>
-              <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-widest">CARGO OPERATIONS</span>
-            </div>
-          )}
+        <div className="sl-logo-text">
+          <span className="sl-logo-name">SkyLedger</span>
+          <span className="sl-logo-sub">CARGO OPERATIONS</span>
         </div>
       </div>
 
-      {/* Navigation Links */}
-      <nav className="flex flex-col gap-1 px-3">
+      {/* Nav Items */}
+      <nav className="sl-sidebar-nav">
         {navItems.map((item) => {
           const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
-          
           return (
-            <Link 
-              key={item.href} 
-              href={item.href} 
-              className={`
-                flex items-center p-3 rounded-lg transition-all duration-200 group
-                ${isActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-500 hover:bg-slate-50'}
-                ${!isOpen ? 'justify-center' : 'gap-4'}
-              `}
-              title={!isOpen ? item.label : ""}
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`sl-nav-item ${isActive ? 'active' : ''}`}
             >
-              <div className="flex-shrink-0 w-5 flex justify-center items-center">
-                <FontAwesomeIcon icon={item.icon} className="text-lg" fixedWidth />
-              </div>
-              
-              <span className={`
-                text-sm transition-all duration-300 overflow-hidden whitespace-nowrap
-                ${!isOpen ? 'w-0 opacity-0' : 'w-auto opacity-100'}
-              `}>
-                {item.label}
-              </span>
-
-              {isActive && isOpen && (
-                <div className="ml-auto w-1 h-4 bg-blue-700 rounded-full" />
-              )}
+              <span className="sl-nav-icon">{item.icon}</span>
+              <span className="sl-nav-label">{item.label}</span>
+              {isActive && <div className="sl-active-bar" />}
             </Link>
           );
         })}
       </nav>
 
-      {/* Bottom Actions */}
-      <div className="mt-auto p-3 border-t border-slate-100">
-        <button 
-          onClick={handleSignOut} 
-          className={`
-            flex items-center p-3 text-red-500 hover:bg-red-50 rounded-lg transition-all w-full
-            ${!isOpen ? 'justify-center' : 'gap-4'}
-          `}
-        >
-          <div className="flex-shrink-0 w-5 flex justify-center items-center">
-            <FontAwesomeIcon icon={faRightFromBracket} className="text-lg" fixedWidth />
-          </div>
-          <span className={`
-            text-sm font-bold transition-all duration-300 overflow-hidden whitespace-nowrap
-            ${!isOpen ? 'w-0 opacity-0' : 'w-auto opacity-100'}
-          `}>
-            Log Out
+      {/* Bottom Items */}
+      <div className="sl-sidebar-bottom">
+        {bottomItems.map((item) => (
+          <Link key={item.href} href={item.href} className="sl-nav-item sl-nav-bottom-item">
+            <span className="sl-nav-icon">{item.icon}</span>
+            <span className="sl-nav-label">{item.label}</span>
+          </Link>
+        ))}
+        <button className="sl-nav-item sl-nav-bottom-item sl-logout-btn" onClick={() => {
+          document.cookie = 'terminal_session=; path=/; max-age=0';
+          window.location.href = '/login/auth';
+        }}>
+          <span className="sl-nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
           </span>
+          <span className="sl-nav-label">Log Out</span>
         </button>
       </div>
     </aside>
