@@ -62,7 +62,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="sl-sidebar-logo">
         <div className="sl-logo-icon">
-          <Image src="/SkyLedger no text logo-Photoroom.png" width={28} height={28} alt="SkyLedger" />
+          <Image src="/SkyWhite.png" width={28} height={28} alt="SkyLedger" />
         </div>
         <div className="sl-logo-text">
           <span className="sl-logo-name">SkyLedger</span>
