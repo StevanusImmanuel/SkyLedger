@@ -6,7 +6,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Define all protected terminal routes
-  const protectedRoutes = ['/dashboard', '/shipment', '/reports', '/settings'];
+  const protectedRoutes = ['/dashboard', '/shipments', '/reports', '/settings'];
 
   // Check if the current path starts with any of the protected routes
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
@@ -23,7 +23,7 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/dashboard/:path*',
-    '/shipment/:path*',
+    '/shipments/:path*',
     '/reports/:path*',
     '/settings/:path*',
   ],
