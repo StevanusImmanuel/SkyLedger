@@ -8,6 +8,7 @@ import About from "@/components/landingpages/about";
 import Capabilities from "@/components/capabilities";
 import CTA from "@/components/landingpages/cta";
 import Footer from "@/components/landingpages/footer";
+import Contact from "@/components/landingpages/contact";
 
 export default function LandingPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -30,6 +31,7 @@ export default function LandingPage() {
           <Hero />
           <About />
           <Capabilities />
+          <Contact />
           <CTA />
           <Footer />
         </div>
