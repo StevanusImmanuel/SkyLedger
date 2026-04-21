@@ -45,14 +45,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const body = await request.json();
     const parsed = updateShipmentSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
 
     const { status, statusNote, ...fields } = parsed.data;
 
+    const updateData: Record<string, unknown> = { ...fields, updatedAt: new Date() };
+    if (fields.weightKg !== undefined) updateData.weightKg = String(fields.weightKg);
+    if (status) updateData.status = status;
+
     await db
       .update(shipments)
-      .set({ ...fields, ...(status ? { status } : {}), updatedAt: new Date() })
+      .set(updateData)
       .where(eq(shipments.id, id));
 
     if (status) {

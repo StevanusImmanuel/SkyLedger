@@ -27,7 +27,7 @@ export async function loginAction(_prev: unknown, formData: FormData) {
     password: formData.get('password'),
   });
 
-  if (!parsed.success) return { error: parsed.error.errors[0].message };
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const user = await db.query.users.findFirst({
     where: eq(users.email, parsed.data.email),
@@ -56,7 +56,7 @@ export async function registerAction(_prev: unknown, formData: FormData) {
     department: formData.get('department') || undefined,
   });
 
-  if (!parsed.success) return { error: parsed.error.errors[0].message };
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const existing = await db.query.users.findFirst({
     where: eq(users.email, parsed.data.email),

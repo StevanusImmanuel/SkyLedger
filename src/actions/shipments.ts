@@ -35,7 +35,7 @@ export async function createShipmentAction(_prev: unknown, formData: FormData) {
     notes: formData.get('notes') || undefined,
   });
 
-  if (!parsed.success) return { error: parsed.error.errors[0].message };
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const [originAirportId, destAirportId] = await Promise.all([
     resolveAirportId(parsed.data.originIata),
@@ -83,7 +83,7 @@ export async function updateShipmentAction(
     statusNote: formData.get('statusNote') || undefined,
   });
 
-  if (!parsed.success) return { error: parsed.error.errors[0].message };
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   await db
     .update(shipments)
