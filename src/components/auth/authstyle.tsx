@@ -1,6 +1,37 @@
 import styled from 'styled-components';
 
 export const StyledWrapper = styled.div`
+  @keyframes fadeInDown {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   /* Main Container Card */
   .auth-card {
     background-color: #ffffff;
@@ -11,29 +42,41 @@ export const StyledWrapper = styled.div`
     max-width: 480px;
     padding: 40px;
     position: relative;
+    animation: fadeInDown 0.6s ease-out forwards;
   }
 
   /* Navigation Buttons */
   .back-btn {
     position: absolute;
     top: 20px;
-    right: 20px;
+    left: 20px;
     font-size: 10px;
     font-weight: 900;
     color: #1a2d5a;
     background: transparent;
     border: 2px solid #1a2d5a;
-    padding: 4px 12px;
+    padding: 8px 14px;
     border-radius: 6px;
     cursor: pointer;
-    transition: 0.2s;
+    transition: all 0.3s ease;
     letter-spacing: 0.1em;
     text-transform: uppercase;
+    animation: fadeInDown 0.6s ease-out 0.1s forwards;
+    opacity: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
   }
-  
+
   .back-btn:hover {
     background: #1a2d5a;
     color: white;
+    transform: translateX(-2px);
+  }
+
+  .back-btn:active {
+    transform: translateX(-2px) scale(0.98);
   }
 
   /* Typography */
@@ -45,6 +88,14 @@ export const StyledWrapper = styled.div`
     letter-spacing: 0.05em;
     display: block;
     margin-bottom: 6px;
+    animation: slideInUp 0.5s ease-out forwards;
+    opacity: 0;
+  }
+
+  /* Title Section Animation */
+  .title-section {
+    animation: fadeInDown 0.6s ease-out 0.15s forwards;
+    opacity: 0;
   }
 
   /* Input Container */
@@ -57,13 +108,51 @@ export const StyledWrapper = styled.div`
     align-items: center;
     padding: 0 16px;
     transition: 0.2s ease-in-out;
-    position: relative; /* Required for password toggle alignment */
+    position: relative;
+    animation: slideInUp 0.5s ease-out forwards;
+    opacity: 0;
   }
 
   .input-form:focus-within {
     border-color: #1a2d5a;
     background-color: #ffffff;
     box-shadow: 0 0 0 4px rgba(26, 45, 90, 0.05);
+  }
+
+  /* Stagger animations for form fields */
+  & > form > div:nth-child(2) {
+    animation: fadeInDown 0.6s ease-out 0.2s forwards;
+    opacity: 0;
+  }
+
+  & > form > div:nth-child(3) {
+    animation: slideInUp 0.5s ease-out 0.3s forwards;
+    opacity: 0;
+  }
+
+  & > form > div:nth-child(4) {
+    animation: slideInUp 0.5s ease-out 0.4s forwards;
+    opacity: 0;
+  }
+
+  & > form > div:nth-child(5) {
+    animation: slideInUp 0.5s ease-out 0.5s forwards;
+    opacity: 0;
+  }
+
+  & > form > div:nth-child(6) {
+    animation: slideInUp 0.5s ease-out 0.6s forwards;
+    opacity: 0;
+  }
+
+  & > form > div:nth-child(7) {
+    animation: slideInUp 0.5s ease-out 0.7s forwards;
+    opacity: 0;
+  }
+
+  & > form > div:nth-child(n + 8) {
+    animation: slideInUp 0.5s ease-out 0.8s forwards;
+    opacity: 0;
   }
 
   /* Auto-Generated / Read-Only Variant */
@@ -125,16 +214,22 @@ export const StyledWrapper = styled.div`
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border: none;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    animation: slideInUp 0.5s ease-out 0.85s forwards;
+    opacity: 0;
   }
 
   .btn-primary:not(:disabled):hover {
     background-color: #0f1c3a;
-    transform: translateY(-2px);
+    transform: translateY(-3px);
     box-shadow: 0 12px 20px -5px rgba(26, 45, 90, 0.3);
+  }
+
+  .btn-primary:not(:disabled):active {
+    transform: translateY(-1px);
   }
 
   .btn-primary:disabled {
@@ -150,6 +245,8 @@ export const StyledWrapper = styled.div`
     gap: 12px;
     height: 52px;
     margin: 20px 0;
+    animation: slideInUp 0.5s ease-out 0.55s forwards;
+    opacity: 0;
   }
 
   .captcha-code-box {
@@ -167,6 +264,12 @@ export const StyledWrapper = styled.div`
     color: #1a2d5a;
     letter-spacing: 3px;
     user-select: none;
+    transition: 0.2s ease;
+  }
+
+  .captcha-code-box:hover {
+    border-color: #1a2d5a;
+    background-color: #f8fafc;
   }
 
   .captcha-input-wrapper {
@@ -202,6 +305,8 @@ export const StyledWrapper = styled.div`
     display: flex;
     gap: 12px;
     margin-top: 16px;
+    animation: slideInUp 0.5s ease-out 0.9s forwards;
+    opacity: 0;
   }
 
   .external-btn {
@@ -217,7 +322,7 @@ export const StyledWrapper = styled.div`
     gap: 8px;
     border: 1.5px solid #e2e8f0;
     background-color: #ffffff;
-    transition: 0.2s;
+    transition: all 0.2s ease;
     text-transform: uppercase;
   }
 
@@ -225,6 +330,11 @@ export const StyledWrapper = styled.div`
     border-color: #1a2d5a;
     color: #1a2d5a;
     background-color: #f8fafc;
+    transform: translateY(-2px);
+  }
+
+  .external-btn:active {
+    transform: translateY(0);
   }
 
   /* Autofill Overrides */

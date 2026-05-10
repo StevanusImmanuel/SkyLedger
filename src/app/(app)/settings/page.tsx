@@ -1,6 +1,20 @@
 'use client';
+import { useEffect, useState } from 'react';
 
 export default function SettingsPage() {
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    const savedTheme = (localStorage.getItem('theme') || 'light') as 'light' | 'dark';
+    setTheme(savedTheme);
+  }, []);
+
+  const handleThemeChange = (newTheme: 'light' | 'dark') => {
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+  };
+
   return (
     <div>
       {/* Page Header */}
@@ -118,18 +132,26 @@ export default function SettingsPage() {
             {/* Interface Theme */}
             <label className="sl-pref-label">Interface Theme</label>
             <div className="sl-theme-options">
-              <div className="sl-theme-option">
-                <div className="sl-theme-preview sl-theme-light selected">
+              <button
+                onClick={() => handleThemeChange('light')}
+                className="sl-theme-option"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                <div className={`sl-theme-preview sl-theme-light ${theme === 'light' ? 'selected' : ''}`}>
                   <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #f0f4f8 40%, #dbeafe 100%)' }} />
                 </div>
-                <span className="sl-theme-label" style={{ color: '#1a2d5a', fontWeight: 700 }}>Light Blue</span>
-              </div>
-              <div className="sl-theme-option">
-                <div className="sl-theme-preview sl-theme-dark">
+                <span className="sl-theme-label" style={{ color: theme === 'light' ? '#1a2d5a' : '#94a3b8', fontWeight: theme === 'light' ? 700 : 600 }}>Light Blue</span>
+              </button>
+              <button
+                onClick={() => handleThemeChange('dark')}
+                className="sl-theme-option"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                <div className={`sl-theme-preview sl-theme-dark ${theme === 'dark' ? 'selected' : ''}`}>
                   <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #1e293b 40%, #0f172a 100%)' }} />
                 </div>
-                <span className="sl-theme-label">Deep Navy</span>
-              </div>
+                <span className="sl-theme-label" style={{ color: theme === 'dark' ? '#1a2d5a' : '#94a3b8', fontWeight: theme === 'dark' ? 700 : 600 }}>Deep Navy</span>
+              </button>
             </div>
 
             {/* Notifications */}

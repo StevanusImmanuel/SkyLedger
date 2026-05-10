@@ -166,10 +166,7 @@
 }
 
 .sl-topbar-nav {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  height: 100%;
+  display: none;
 }
 
 .sl-topbar-link {
@@ -305,6 +302,806 @@
   background: #fff;
   border-top: 1px solid #e8edf4;
   flex-shrink: 0;
+}
+
+/* ============================================================
+   LAZY LOAD ANIMATIONS
+   ============================================================ */
+
+@keyframes lazyFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Auto-animate stat cards with stagger */
+.sl-stat-card {
+  animation: lazyFadeIn 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.sl-stats-grid .sl-stat-card:nth-child(1) { animation-delay: 0.05s; }
+.sl-stats-grid .sl-stat-card:nth-child(2) { animation-delay: 0.15s; }
+.sl-stats-grid .sl-stat-card:nth-child(3) { animation-delay: 0.25s; }
+.sl-stats-grid .sl-stat-card:nth-child(4) { animation-delay: 0.35s; }
+
+/* Auto-animate chart cards */
+.sl-chart-card {
+  animation: lazyFadeIn 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.sl-charts-grid .sl-chart-card { animation-delay: 0.4s; }
+
+/* Auto-animate SLA card */
+.sl-sla-card {
+  animation: lazyFadeIn 0.6s ease-out forwards;
+  opacity: 0;
+  animation-delay: 0.5s;
+}
+
+/* Auto-animate routes section */
+.sl-routes-section {
+  animation: lazyFadeIn 0.6s ease-out forwards;
+  opacity: 0;
+  animation-delay: 0.6s;
+}
+
+/* Auto-animate report cards */
+.sl-rstat-card {
+  animation: lazyFadeIn 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.sl-reports-stats .sl-rstat-card:nth-child(1) { animation-delay: 0.05s; }
+.sl-reports-stats .sl-rstat-card:nth-child(2) { animation-delay: 0.15s; }
+.sl-reports-stats .sl-rstat-card:nth-child(3) { animation-delay: 0.25s; }
+.sl-reports-stats .sl-rstat-card:nth-child(4) { animation-delay: 0.35s; }
+
+/* Auto-animate shipment components */
+.sl-manifest,
+.sl-progress-tracker,
+.sl-shipment-details-card,
+.sl-map-card,
+.sl-logs-card {
+  animation: lazyFadeIn 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.sl-manifest { animation-delay: 0.1s; }
+.sl-progress-tracker { animation-delay: 0.2s; }
+.sl-shipment-details-card { animation-delay: 0.3s; }
+.sl-map-card { animation-delay: 0.4s; }
+.sl-logs-card { animation-delay: 0.5s; }
+
+/* Auto-animate AWB table */
+.sl-awb-table-container {
+  animation: lazyFadeIn 0.6s ease-out forwards;
+  opacity: 0;
+  animation-delay: 0.5s;
+}
+
+/* Auto-animate settings cards */
+.sl-settings-card {
+  animation: lazyFadeIn 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.sl-settings-grid > div:nth-child(1) .sl-settings-card:nth-child(1) { animation-delay: 0.1s; }
+.sl-settings-grid > div:nth-child(1) .sl-settings-card:nth-child(2) { animation-delay: 0.2s; }
+.sl-settings-grid > div:nth-child(2) .sl-settings-card { animation-delay: 0.25s; }
+
+/* ============================================================
+   RESPONSIVE DESIGN
+   ============================================================ */
+
+/* Tablet (768px - 1024px) */
+@media (max-width: 1024px) {
+  .sl-sidebar {
+    width: 140px;
+    min-width: 140px;
+  }
+
+  .sl-logo-text {
+    display: none;
+  }
+
+  .sl-sidebar-logo {
+    justify-content: center;
+  }
+
+  .sl-nav-label {
+    display: none;
+  }
+
+  .sl-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sl-charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sl-details-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .sl-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sl-bottom-charts {
+    grid-template-columns: 1fr;
+  }
+
+  .sl-reports-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sl-rstat-card {
+    border-right: none;
+    border-bottom: 1px solid #e8edf4;
+  }
+
+  .sl-rstat-card:last-child {
+    border-bottom: none;
+  }
+
+  .sl-shipment-body {
+    grid-template-columns: 1fr;
+  }
+
+  /* Responsive font sizes for tablet */
+  .sl-page-title {
+    font-size: 20px;
+  }
+
+  .sl-stat-value {
+    font-size: 24px;
+  }
+
+  .sl-rstat-value {
+    font-size: 26px;
+  }
+
+  .sl-chart-title,
+  .sl-sla-title,
+  .sl-routes-title {
+    font-size: 12px;
+  }
+
+  .sl-awb-id {
+    font-size: 22px;
+  }
+}
+
+/* Mobile (max-width: 768px) */
+@media (max-width: 768px) {
+  .sl-app {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .sl-sidebar {
+    display: none;
+  }
+
+  .sl-main {
+    width: 100%;
+  }
+
+  .sl-content {
+    padding: 16px 12px;
+  }
+
+  .sl-topbar {
+    flex-wrap: nowrap;
+    height: auto;
+    padding: 10px 12px;
+    gap: 10px;
+    min-height: 52px;
+  }
+
+  .sl-topbar-nav {
+    display: none;
+  }
+
+  .sl-topbar-search {
+    flex: 1;
+    min-width: 150px;
+    max-width: 100%;
+  }
+
+  .sl-topbar-link {
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  .sl-icon-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .sl-user-profile {
+    gap: 6px;
+    padding: 2px 4px;
+  }
+
+  .sl-user-name {
+    display: none;
+  }
+
+  .sl-user-role {
+    display: none;
+  }
+
+  .sl-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 10px;
+  }
+
+  /* Stats grid mobile */
+  .sl-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .sl-stat-card {
+    padding: 12px 14px;
+  }
+
+  .sl-stat-value {
+    font-size: 24px;
+  }
+
+  /* Charts mobile */
+  .sl-charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sl-chart-card {
+    padding: 16px 12px;
+  }
+
+  /* Details grid mobile */
+  .sl-details-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Settings mobile */
+  .sl-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sl-settings-card {
+    padding: 16px 12px;
+  }
+
+  .sl-fields-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .sl-profile-area {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 14px;
+  }
+
+  .sl-profile-avatar {
+    width: 60px;
+    height: 60px;
+    font-size: 24px;
+  }
+
+  .sl-profile-fields {
+    width: 100%;
+  }
+
+  .sl-user-info {
+    align-items: center;
+  }
+
+  /* Reports mobile */
+  .sl-reports-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .sl-rstat-card {
+    border-right: none;
+    border-bottom: 1px solid #e8edf4;
+  }
+
+  .sl-rstat-card:last-child {
+    border-bottom: none;
+  }
+
+  .sl-report-filters {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sl-filter-sel {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .sl-report-export-btns {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .sl-btn-export-csv,
+  .sl-btn-export-pdf {
+    flex: 1;
+  }
+
+  /* Table responsive */
+  .sl-table {
+    font-size: 12px;
+  }
+
+  .sl-table th {
+    padding: 6px 8px;
+    font-size: 9px;
+  }
+
+  .sl-table td {
+    padding: 10px 8px;
+  }
+
+  /* Shipment mobile */
+  .sl-shipment-nav {
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .sl-awb-search {
+    width: 100%;
+  }
+
+  .sl-shipment-body {
+    grid-template-columns: 1fr;
+  }
+
+  .sl-manifest-awb {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .sl-awb-id {
+    font-size: 20px;
+  }
+
+  .sl-manifest-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .sl-manifest-btn {
+    width: 100%;
+  }
+
+  .sl-tracker-steps {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .sl-tracker-steps::before {
+    content: none;
+  }
+
+  .sl-tracker-step {
+    align-items: flex-start;
+    padding-left: 30px;
+    position: relative;
+  }
+
+  .sl-tracker-step::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 40px;
+    width: 2px;
+    height: 20px;
+    background: #e2e8f0;
+  }
+
+  .sl-tracker-step:last-child::before {
+    display: none;
+  }
+
+  /* Bottom charts mobile */
+  .sl-bottom-charts {
+    grid-template-columns: 1fr;
+  }
+
+  /* Filters row mobile */
+  .sl-filters-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sl-period-tabs {
+    width: 100%;
+  }
+
+  .sl-period-tab {
+    flex: 1;
+  }
+
+  .sl-export-btns {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .sl-btn-export {
+    width: 100%;
+  }
+
+  /* Page headers mobile */
+  .sl-page-title {
+    font-size: 18px;
+    margin-bottom: 2px;
+  }
+
+  .sl-page-subtitle {
+    font-size: 10px;
+  }
+
+  /* Responsive font sizes for mobile */
+  .sl-topbar-link {
+    font-size: 11px;
+  }
+
+  .sl-search-input {
+    font-size: 11px;
+  }
+
+  .sl-stat-label {
+    font-size: 8px;
+  }
+
+  .sl-stat-value {
+    font-size: 20px;
+  }
+
+  .sl-stat-value .unit {
+    font-size: 11px;
+  }
+
+  .sl-stat-meta {
+    font-size: 10px;
+  }
+
+  .sl-chart-title {
+    font-size: 12px;
+  }
+
+  .sl-chart-subtitle {
+    font-size: 8px;
+  }
+
+  .sl-legend-item {
+    font-size: 10px;
+  }
+
+  .sl-sla-title {
+    font-size: 12px;
+  }
+
+  .sl-sla-subtitle {
+    font-size: 8px;
+  }
+
+  .sl-sla-legend-row {
+    font-size: 10px;
+  }
+
+  .sl-routes-title {
+    font-size: 12px;
+  }
+
+  .sl-routes-subtitle {
+    font-size: 8px;
+  }
+
+  .sl-view-all-link {
+    font-size: 10px;
+  }
+
+  .sl-table th {
+    font-size: 8px;
+  }
+
+  .sl-table td {
+    font-size: 11px;
+  }
+
+  .sl-route-main {
+    font-size: 12px;
+  }
+
+  .sl-route-sub {
+    font-size: 9px;
+  }
+
+  .sl-flight-id {
+    font-size: 11px;
+  }
+
+  .sl-cargo-weight {
+    font-size: 11px;
+  }
+
+  .sl-status-badge {
+    font-size: 9px;
+  }
+
+  .sl-rstat-label {
+    font-size: 8px;
+  }
+
+  .sl-rstat-value {
+    font-size: 22px;
+  }
+
+  .sl-rstat-value.large {
+    font-size: 18px;
+  }
+
+  .sl-rstat-change {
+    font-size: 10px;
+  }
+
+  .sl-rstat-unit {
+    font-size: 12px;
+  }
+
+  .sl-filter-label {
+    font-size: 9px;
+  }
+
+  .sl-filter-sel {
+    font-size: 11px;
+  }
+
+  .sl-btn-export-csv,
+  .sl-btn-export-pdf {
+    font-size: 11px;
+  }
+
+  .sl-awb-number {
+    font-size: 11px;
+  }
+
+  .sl-airport-badge {
+    font-size: 9px;
+  }
+
+  .sl-table-showing {
+    font-size: 10px;
+  }
+
+  .sl-page-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+  }
+
+  .sl-shipment-nav {
+    margin-bottom: 16px;
+  }
+
+  .sl-awb-id {
+    font-size: 20px;
+  }
+
+  .sl-in-transit-badge {
+    font-size: 10px;
+  }
+
+  .sl-manifest-route {
+    font-size: 11px;
+  }
+
+  .sl-manifest-btn {
+    font-size: 11px;
+  }
+
+  .sl-step-label {
+    font-size: 8px;
+  }
+
+  .sl-step-date {
+    font-size: 8px;
+  }
+
+  .sl-details-title {
+    font-size: 12px;
+  }
+
+  .sl-detail-field label {
+    font-size: 8px;
+  }
+
+  .sl-detail-field .value {
+    font-size: 12px;
+  }
+
+  .sl-detail-field .sub-value {
+    font-size: 10px;
+  }
+
+  .sl-map-stat-label {
+    font-size: 9px;
+  }
+
+  .sl-map-stat-row {
+    font-size: 10px;
+  }
+
+  .sl-log-time {
+    font-size: 9px;
+  }
+
+  .sl-log-event {
+    font-size: 11px;
+  }
+
+  .sl-log-desc {
+    font-size: 10px;
+  }
+
+  .sl-assist-title {
+    font-size: 12px;
+  }
+
+  .sl-assist-text {
+    font-size: 10px;
+  }
+
+  .sl-contact-btn {
+    font-size: 11px;
+  }
+
+  .sl-settings-section-title {
+    font-size: 13px;
+  }
+
+  .sl-field-label {
+    font-size: 8px;
+  }
+
+  .sl-field-input {
+    font-size: 12px;
+  }
+
+  .sl-tfa-label {
+    font-size: 12px;
+  }
+
+  .sl-tfa-desc {
+    font-size: 10px;
+  }
+
+  .sl-sessions-title {
+    font-size: 8px;
+  }
+
+  .sl-session-name {
+    font-size: 11px;
+  }
+
+  .sl-session-sub {
+    font-size: 10px;
+  }
+
+  .sl-terminate-btn {
+    font-size: 10px;
+  }
+
+  .sl-theme-label {
+    font-size: 10px;
+  }
+
+  .sl-notif-label {
+    font-size: 11px;
+  }
+
+  .sl-pref-label {
+    font-size: 8px;
+  }
+
+  .sl-tz-select {
+    font-size: 11px;
+  }
+
+  .sl-btn-cancel,
+  .sl-btn-save {
+    font-size: 12px;
+  }
+
+  .sl-cargo-table-title {
+    font-size: 12px;
+  }
+
+  .sl-cargo-table-subtitle {
+    font-size: 8px;
+  }
+
+  /* SLA card mobile */
+  .sl-sla-card {
+    padding: 16px 12px;
+  }
+
+  /* Routes section mobile */
+  .sl-routes-section {
+    padding: 16px 12px;
+  }
+
+  .sl-routes-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Map card mobile */
+  .sl-map-placeholder {
+    height: 120px;
+  }
+
+  /* Logs mobile */
+  .sl-logs-card {
+    padding: 16px 12px;
+  }
+
+  .sl-log-item {
+    gap: 12px;
+    padding: 10px 0;
+  }
+
+  .sl-log-time {
+    min-width: 60px;
+    font-size: 9.5px;
+  }
+
+  /* Assistance card mobile */
+  .sl-assist-card {
+    padding: 16px 12px;
+  }
+
+  .sl-assist-title {
+    font-size: 12px;
+  }
+
+  .sl-assist-text {
+    font-size: 10px;
+  }
+
+  /* TFA row mobile */
+  .sl-tfa-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .sl-tfa-info {
+    width: 100%;
+  }
+
+  .sl-toggle {
+    align-self: flex-start;
+  }
 }
 
 .sl-status-timestamp {
