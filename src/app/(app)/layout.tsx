@@ -1,5 +1,6 @@
 import Sidebar from '@/components/dashboard/Sidebar';
 import Topbar from '@/components/dashboard/Topbar';
+import { PageTransition } from '@/components/ui/PageTransition';
 import '@/app/dashboard.css';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -9,7 +10,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="sl-main">
         <Topbar />
         <main className="sl-content">
-          {children}
+          <PageTransition>
+            {children}
+          </PageTransition>
         </main>
         {/* Status Bar */}
         <footer className="sl-statusbar">
