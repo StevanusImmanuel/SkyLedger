@@ -36,7 +36,7 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
-.env *
+
 # vercel
 .vercel
 
@@ -44,4 +44,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-*.md
+# Keep important documentation
+!ERD.md
+!Design.md
