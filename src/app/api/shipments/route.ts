@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { shipments, shipmentEvents, airports } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
 import { createShipmentSchema } from '@/lib/validations/shipment';
-import { eq, desc, and, SQL } from 'drizzle-orm';
+import { eq, desc, and, SQL, or, ilike, count } from 'drizzle-orm';
 
 async function getAuthUser(req: NextRequest) {
   const token = req.cookies.get('terminal_session')?.value;
@@ -22,25 +22,42 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const statusFilter = searchParams.get('status') as typeof shipments.$inferSelect.status | null;
+  const search = searchParams.get('search') || '';
   const limit = Math.min(Number(searchParams.get('limit') ?? 50), 100);
   const offset = Number(searchParams.get('offset') ?? 0);
 
-  const where: SQL | undefined = statusFilter ? eq(shipments.status, statusFilter) : undefined;
+  const conditions: SQL[] = [];
+  if (statusFilter) {
+    conditions.push(eq(shipments.status, statusFilter));
+  }
+  if (search) {
+    conditions.push(
+      or(
+        ilike(shipments.awbNumber, `%${search}%`),
+        ilike(shipments.productType, `%${search}%`)
+      )!
+    );
+  }
 
-  const rows = await db.query.shipments.findMany({
-    where,
-    with: {
-      originAirport: true,
-      destAirport: true,
-      flight: true,
-      createdByUser: { columns: { id: true, name: true, skyledgerId: true } },
-    },
-    orderBy: [desc(shipments.createdAt)],
-    limit,
-    offset,
-  });
+  const where: SQL | undefined = conditions.length > 0 ? and(...conditions) : undefined;
 
-  return NextResponse.json({ success: true, data: rows });
+  const [rows, [{ value: total }]] = await Promise.all([
+    db.query.shipments.findMany({
+      where,
+      with: {
+        originAirport: true,
+        destAirport: true,
+        flight: true,
+        createdByUser: { columns: { id: true, name: true, skyledgerId: true } },
+      },
+      orderBy: [desc(shipments.createdAt)],
+      limit,
+      offset,
+    }),
+    db.select({ value: count() }).from(shipments).where(where),
+  ]);
+
+  return NextResponse.json({ success: true, data: rows, total });
 }
 
 export async function POST(request: NextRequest) {

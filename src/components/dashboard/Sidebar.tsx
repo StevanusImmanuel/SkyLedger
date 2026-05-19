@@ -62,7 +62,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="sl-sidebar-logo">
         <div className="sl-logo-icon">
-          <Image src="/SkyWhite.png" width={28} height={28} alt="SkyLedger" />
+          <Image src="/SkyWhite.png" width={28} height={28} alt="SkyLedger" style={{ height: "auto" }} />
         </div>
         <div className="sl-logo-text">
           <span className="sl-logo-name">SkyLedger</span>
@@ -96,8 +96,12 @@ export default function Sidebar() {
             <span className="sl-nav-label">{item.label}</span>
           </Link>
         ))}
-        <button className="sl-nav-item sl-nav-bottom-item sl-logout-btn" onClick={() => {
-          document.cookie = 'terminal_session=; path=/; max-age=0';
+        <button className="sl-nav-item sl-nav-bottom-item sl-logout-btn" onClick={async () => {
+          try {
+            await fetch('/api/auth?action=logout', { method: 'POST' });
+          } catch (err) {
+            console.error('Logout error:', err);
+          }
           window.location.href = '/login/auth';
         }}>
           <span className="sl-nav-icon">

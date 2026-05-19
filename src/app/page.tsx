@@ -14,9 +14,10 @@ export default function LandingPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Reduced from 3000ms to 800ms for better LCP
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 3000);
+    }, 800);
     return () => clearTimeout(timer);
   }, []);
 

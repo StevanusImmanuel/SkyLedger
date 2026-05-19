@@ -1,64 +1,95 @@
 'use client';
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { usePagination } from '@/lib/hooks/usePagination';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 import { Pagination } from '@/components/ui/Pagination';
 import { ShipmentTableSkeleton, StatCardSkeleton } from '@/components/ui/skeletons';
 
-const shipments = [
-  { id: 1, awb: 'AWB-960231', dest: 'LHR', destName: 'London, UK', destColor: 'blue', flight: 'BA-0284', priority: 'URGENT', status: 'Delayed', statusClass: 'sl-badge-delayed', indicatorColor: '#ef4444' },
-  { id: 2, awb: 'AWB-880231', dest: 'LHR', destName: 'London, UK', destColor: 'blue', flight: 'SA-0284', priority: 'URGENT', status: 'Delayed', statusClass: 'sl-badge-delayed', indicatorColor: '#ef4444' },
-  { id: 3, awb: 'AWB-672190', dest: 'SIN', destName: 'Singapore, SG', destColor: 'orange', flight: 'SA-0012', status: 'In-Transit', statusClass: 'sl-badge-intransit', priority: 'STANDARD', indicatorColor: '#0ea5e9' },
-  { id: 4, awb: 'AWB-443211', dest: 'NRT', destName: 'Tokyo, JP', destColor: 'purple', flight: 'JL-0005', status: 'Manifested', statusClass: 'sl-badge-manifested', priority: 'HIGH', indicatorColor: '#8b5cf6' },
-  { id: 5, awb: 'AWB-109283', dest: 'JFK', destName: 'New York, US', destColor: 'green', flight: 'UA-0099', status: 'In-Transit', statusClass: 'sl-badge-intransit', priority: 'STANDARD', indicatorColor: '#0ea5e9' },
-  { id: 6, awb: 'AWB-109263', dest: 'JFK', destName: 'New York, US', destColor: 'green', flight: 'UA-0099', status: 'In-Transit', statusClass: 'sl-badge-intransit', priority: 'STANDARD', indicatorColor: '#0ea5e9' },
-  { id: 7, awb: 'AWB-234567', dest: 'CDG', destName: 'Paris, FR', destColor: 'orange', flight: 'AF-1234', priority: 'HIGH', status: 'Manifested', statusClass: 'sl-badge-manifested', indicatorColor: '#8b5cf6' },
-  { id: 8, awb: 'AWB-345678', dest: 'FRA', destName: 'Frankfurt, DE', destColor: 'purple', flight: 'LH-5678', priority: 'STANDARD', status: 'In-Transit', statusClass: 'sl-badge-intransit', indicatorColor: '#0ea5e9' },
-  { id: 9, awb: 'AWB-456789', dest: 'DXB', destName: 'Dubai, AE', destColor: 'red', flight: 'EK-9012', priority: 'URGENT', status: 'Delayed', statusClass: 'sl-badge-delayed', indicatorColor: '#ef4444' },
-  { id: 10, awb: 'AWB-567890', dest: 'SYD', destName: 'Sydney, AU', destColor: 'green', flight: 'QF-3456', priority: 'STANDARD', status: 'In-Transit', statusClass: 'sl-badge-intransit', indicatorColor: '#0ea5e9' },
-  { id: 11, awb: 'AWB-678901', dest: 'HKG', destName: 'Hong Kong, HK', destColor: 'blue', flight: 'CX-7890', priority: 'HIGH', status: 'Manifested', statusClass: 'sl-badge-manifested', indicatorColor: '#8b5cf6' },
-  { id: 12, awb: 'AWB-789012', dest: 'LAX', destName: 'Los Angeles, US', destColor: 'purple', flight: 'AA-1234', priority: 'STANDARD', status: 'In-Transit', statusClass: 'sl-badge-intransit', indicatorColor: '#0ea5e9' },
-];
+type Shipment = {
+  id: string;
+  awbNumber: string;
+  originAirport: { iataCode: string; name: string; city: string; country: string } | null;
+  destAirport: { iataCode: string; name: string; city: string; country: string } | null;
+  flight: { flightId: string } | null;
+  priority: 'standard' | 'express' | 'critical';
+  status: 'pending' | 'processing' | 'in_transit' | 'delivered' | 'delayed' | 'cancelled';
+  weightKg: string;
+  createdAt: string;
+};
 
 const priorityColor: Record<string, string> = {
-  URGENT: '#fee2e2',
-  URGENTTEXT: '#b91c1c',
-  HIGH: '#fef3c7',
-  HIGHTEXT: '#b45309',
+  CRITICAL: '#fee2e2',
+  CRITICALTEXT: '#b91c1c',
+  EXPRESS: '#fef3c7',
+  EXPRESSTEXT: '#b45309',
   STANDARD: '#dbeafe',
   STANDARDTEXT: '#1d4ed8',
+};
+
+const statusClassMap: Record<string, string> = {
+  delayed: 'sl-badge-delayed',
+  in_transit: 'sl-badge-intransit',
+  pending: 'sl-badge-manifested',
+  processing: 'sl-badge-manifested',
+  delivered: 'sl-badge-ontime',
+  cancelled: 'sl-badge-delayed',
+};
+
+const statusIndicatorMap: Record<string, string> = {
+  delayed: '#ef4444',
+  in_transit: '#0ea5e9',
+  pending: '#8b5cf6',
+  processing: '#8b5cf6',
+  delivered: '#10b981',
+  cancelled: '#ef4444',
+};
+
+const airportColorMap: Record<string, string> = {
+  LHR: 'blue', JFK: 'green', SIN: 'orange', NRT: 'purple',
+  CDG: 'orange', FRA: 'purple', DXB: 'red', SYD: 'green',
+  HKG: 'blue', LAX: 'purple',
 };
 
 function ShipmentsContent() {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const debouncedSearch = useDebounce(search, 500);
-  const { currentPage, setPage, getPaginatedData, getTotalPages, itemsPerPage } = usePagination(6);
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [total, setTotal] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
+  const debouncedSearch = useDebounce(search, 800); // Increased from 500ms to 800ms
 
   useEffect(() => {
-    if (debouncedSearch.trim()) {
-      console.log(`Searching... "${debouncedSearch}"`);
+    async function fetchShipments() {
+      setIsLoading(true);
+      try {
+        const offset = (currentPage - 1) * itemsPerPage;
+        const params = new URLSearchParams({
+          limit: String(itemsPerPage),
+          offset: String(offset),
+        });
+        if (debouncedSearch) {
+          params.set('search', debouncedSearch);
+        }
+        const res = await fetch(`/api/shipments?${params}`);
+        const json = await res.json();
+        console.log('Shipments API response:', json);
+        if (json.success) {
+          setShipments(json.data);
+          setTotal(json.total);
+        } else {
+          console.error('Shipments API error:', json.error);
+        }
+      } catch (err) {
+        console.error('Failed to fetch shipments:', err);
+      } finally {
+        setIsLoading(false);
+      }
     }
-  }, [debouncedSearch]);
+    fetchShipments();
+  }, [currentPage, debouncedSearch]);
 
-  useEffect(() => {
-    console.log('Fetching shipments data...');
-    setIsLoading(true);
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [currentPage]);
-
-  const filtered = shipments.filter(s =>
-    s.awb.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-    s.destName.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-    s.flight.toLowerCase().includes(debouncedSearch.toLowerCase())
-  );
-
-  const paginatedShipments = getPaginatedData(filtered);
-  const totalPages = getTotalPages(filtered.length);
+  const totalPages = Math.ceil(total / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
 
   return (
@@ -114,21 +145,21 @@ function ShipmentsContent() {
             <div className="sl-stat-header">
               <span className="sl-stat-label">Active</span>
             </div>
-            <div className="sl-stat-value" style={{ fontSize: 32 }}>142</div>
+            <div className="sl-stat-value" style={{ fontSize: 32 }}>{shipments.filter(s => s.status === 'in_transit').length}</div>
             <div className="sl-stat-meta up">↑ +18%</div>
           </div>
           <div className="sl-stat-card">
             <div className="sl-stat-header">
               <span className="sl-stat-label">Delayed</span>
             </div>
-            <div className="sl-stat-value" style={{ fontSize: 32, color: '#ef4444' }}>08</div>
+            <div className="sl-stat-value" style={{ fontSize: 32, color: '#ef4444' }}>{shipments.filter(s => s.status === 'delayed').length.toString().padStart(2, '0')}</div>
             <div className="sl-stat-meta" style={{ color: '#ef4444', fontWeight: 600 }}>↓ -4%</div>
           </div>
           <div className="sl-stat-card">
             <div className="sl-stat-header">
               <span className="sl-stat-label">Priority Weight</span>
             </div>
-            <div className="sl-stat-value" style={{ fontSize: 32 }}>24</div>
+            <div className="sl-stat-value" style={{ fontSize: 32 }}>{shipments.filter(s => s.priority === 'critical' || s.priority === 'express').length}</div>
             <div className="sl-stat-meta neutral">— Planned</div>
           </div>
           <div className="sl-stat-card">
@@ -136,7 +167,7 @@ function ShipmentsContent() {
               <span className="sl-stat-label">Total Tonnage</span>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></svg>
             </div>
-            <div className="sl-stat-value" style={{ fontSize: 32 }}>1,240<span className="unit">T</span></div>
+            <div className="sl-stat-value" style={{ fontSize: 32 }}>{Math.round(shipments.reduce((sum, s) => sum + Number(s.weightKg), 0) / 1000)}<span className="unit">T</span></div>
           </div>
         </div>
       )}
@@ -158,26 +189,30 @@ function ShipmentsContent() {
               </tr>
             </thead>
             <tbody>
-              {paginatedShipments.map((s) => {
+              {shipments.map((s) => {
                 const pKey = s.priority.toUpperCase();
                 const bgColor = priorityColor[pKey] || '#f1f5f9';
                 const textColor = priorityColor[`${pKey}TEXT`] || '#475569';
+                const statusClass = statusClassMap[s.status] || 'sl-badge-manifested';
+                const indicatorColor = statusIndicatorMap[s.status] || '#8b5cf6';
+                const destColor = airportColorMap[s.destAirport?.iataCode || ''] || 'blue';
+
                 return (
                   <tr key={s.id} style={{ cursor: 'pointer' }}>
                     <td style={{ paddingLeft: 20 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 3, height: 34, borderRadius: 2, background: s.indicatorColor, flexShrink: 0 }} />
-                        <span style={{ fontWeight: 700, fontSize: 12, color: '#1a2d5a' }}>{s.awb}</span>
+                        <div style={{ width: 3, height: 34, borderRadius: 2, background: indicatorColor, flexShrink: 0 }} />
+                        <span style={{ fontWeight: 700, fontSize: 12, color: '#1a2d5a' }}>{s.awbNumber}</span>
                       </div>
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span className={`sl-airport-badge ${s.destColor}`}>{s.dest}</span>
-                        <span style={{ fontSize: 12, color: '#475569' }}>{s.destName}</span>
+                        <span className={`sl-airport-badge ${destColor}`}>{s.destAirport?.iataCode || 'N/A'}</span>
+                        <span style={{ fontSize: 12, color: '#475569' }}>{s.destAirport?.city || 'Unknown'}, {s.destAirport?.country || 'N/A'}</span>
                       </div>
                     </td>
                     <td>
-                      <span style={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>{s.flight}</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>{s.flight?.flightId || 'N/A'}</span>
                     </td>
                     <td>
                       <span style={{
@@ -185,13 +220,13 @@ function ShipmentsContent() {
                         borderRadius: 20, fontSize: 10.5, fontWeight: 700,
                         background: bgColor, color: textColor,
                       }}>
-                        {s.priority}
+                        {s.priority.toUpperCase()}
                       </span>
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: s.indicatorColor }} />
-                        <span className={`sl-status-badge ${s.statusClass}`}>{s.status}</span>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: indicatorColor }} />
+                        <span className={`sl-status-badge ${statusClass}`}>{s.status.replace('_', '-').toUpperCase()}</span>
                       </div>
                     </td>
                     <td>
@@ -217,8 +252,8 @@ function ShipmentsContent() {
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
-            onPageChange={setPage}
-            totalItems={filtered.length}
+            onPageChange={setCurrentPage}
+            totalItems={total}
             itemsPerPage={itemsPerPage}
             startIndex={startIndex}
           />

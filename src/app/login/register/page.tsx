@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -8,26 +8,44 @@ import Captcha from '@/components/auth/captcha';
 
 export default function RegisterPage() {
   const [isVerified, setIsVerified] = useState(false);
-  const [generatedId, setGeneratedId] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  // SkyLedger ID Generation Logic
-  useEffect(() => {
-    const prefix = "SL"; // SkyLedger Prefix
-    const randomNum = Math.floor(1000 + Math.random() * 9000); // 4 random digits
-    const timestamp = Date.now().toString().slice(-2); // Last 2 digits of timestamp
-    setGeneratedId(`${prefix}-${randomNum}${timestamp}`);
-  }, []);
-
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isVerified) return;
 
-    // Terminal session activation
-    console.log("Registering Personnel ID:", generatedId);
-    document.cookie = "terminal_session=active; path=/; max-age=3600"; 
-    
-    router.push('/dashboard');
+    setError('');
+    setIsLoading(true);
+
+    const formData = new FormData(e.target as HTMLFormElement);
+    const name = formData.get('name') as string;
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+    const department = formData.get('department') as string;
+
+    try {
+      const res = await fetch('/api/auth?action=register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, department }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Registration failed');
+        setIsLoading(false);
+        return;
+      }
+
+      // Success - redirect to dashboard
+      router.push('/dashboard');
+    } catch (err) {
+      setError('Network error. Please try again.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -59,6 +77,21 @@ export default function RegisterPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+              {/* Error Message */}
+              {error && (
+                <div className="md:col-span-2" style={{
+                  padding: '10px 14px',
+                  background: '#fee2e2',
+                  border: '1px solid #ef4444',
+                  borderRadius: 8,
+                  color: '#b91c1c',
+                  fontSize: 12,
+                  fontWeight: 600
+                }}>
+                  {error}
+                </div>
+              )}
+
               {/* Full Name Field */}
               <div className="md:col-span-2">
                 <label className="label-text">Personnel Full Name</label>
@@ -66,7 +99,14 @@ export default function RegisterPage() {
                   <svg className="opacity-40" height={16} viewBox="0 0 24 24" fill="none" stroke="#1a2d5a" strokeWidth="2.5">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
                   </svg>
-                  <input type="text" className="input-field" placeholder="e.g. John Doe" required />
+                  <input
+                    type="text"
+                    name="name"
+                    className="input-field"
+                    placeholder="e.g. John Doe"
+                    required
+                    disabled={isLoading}
+                  />
                 </div>
               </div>
 
@@ -77,34 +117,49 @@ export default function RegisterPage() {
                   <svg className="opacity-40" height={16} viewBox="0 0 24 24" fill="none" stroke="#1a2d5a" strokeWidth="2.5">
                     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" />
                   </svg>
-                  <input type="email" className="input-field" placeholder="name@skyledger.com" required />
+                  <input
+                    type="email"
+                    name="email"
+                    className="input-field"
+                    placeholder="name@skyledger.com"
+                    required
+                    disabled={isLoading}
+                  />
                 </div>
               </div>
 
-              {/* Auto-Generated User ID Field */}
-              <div>
-                <label className="label-text">System Generated ID</label>
-                <div className="input-form !bg-slate-100 border-dashed !border-slate-300">
+              {/* Department Field */}
+              <div className="md:col-span-2">
+                <label className="label-text">Department</label>
+                <div className="input-form">
                   <svg className="opacity-40" height={16} viewBox="0 0 24 24" fill="none" stroke="#1a2d5a" strokeWidth="2.5">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
                   </svg>
-                  <input 
-                    type="text" 
-                    className="input-field opacity-60 cursor-not-allowed" 
-                    value={generatedId} 
-                    readOnly 
+                  <input
+                    type="text"
+                    name="department"
+                    className="input-field"
+                    placeholder="e.g. Operations"
+                    disabled={isLoading}
                   />
                 </div>
               </div>
 
               {/* Password Field */}
-              <div>
+              <div className="md:col-span-2">
                 <label className="label-text">Security Key</label>
                 <div className="input-form">
                   <svg className="opacity-40" height={16} viewBox="0 0 24 24" fill="none" stroke="#1a2d5a" strokeWidth="2.5">
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
-                  <input type="password" className="input-field" placeholder="••••••••" required />
+                  <input
+                    type="password"
+                    name="password"
+                    className="input-field"
+                    placeholder="••••••••"
+                    required
+                    disabled={isLoading}
+                  />
                 </div>
               </div>
             </div>
@@ -119,12 +174,12 @@ export default function RegisterPage() {
               </label>
             </div>
 
-            <button 
-              type="submit" 
-              className="btn-primary mt-6 group" 
-              disabled={!isVerified}
+            <button
+              type="submit"
+              className="btn-primary mt-6 group"
+              disabled={!isVerified || isLoading}
             >
-              REGISTER ACCOUNT 
+              {isLoading ? 'CREATING ACCOUNT...' : 'REGISTER ACCOUNT'}
               <span className="ml-2 transition-transform group-hover:translate-x-1">→</span>
             </button>
 

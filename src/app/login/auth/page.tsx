@@ -8,18 +8,43 @@ import Captcha from '@/components/auth/captcha';
 
 export default function LoginPage() {
   const [isVerified, setIsVerified] = useState(false);
-  const [showPassword, setShowPassword] = useState(false); // State for password visibility
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isVerified) return;
 
-    // Set the terminal session cookie (expires in 1 hour)
-    document.cookie = "terminal_session=active; path=/; max-age=3600"; 
-    
-    // Initialize session and redirect to terminal dashboard
-    router.push('/dashboard');
+    setError('');
+    setIsLoading(true);
+
+    const formData = new FormData(e.target as HTMLFormElement);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+
+    try {
+      const res = await fetch('/api/auth?action=login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Login failed');
+        setIsLoading(false);
+        return;
+      }
+
+      // Success - redirect to dashboard
+      router.push('/dashboard');
+    } catch (err) {
+      setError('Network error. Please try again.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -51,14 +76,36 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-4 mt-8">
+              {/* Error Message */}
+              {error && (
+                <div style={{
+                  padding: '10px 14px',
+                  background: '#fee2e2',
+                  border: '1px solid #ef4444',
+                  borderRadius: 8,
+                  color: '#b91c1c',
+                  fontSize: 12,
+                  fontWeight: 600
+                }}>
+                  {error}
+                </div>
+              )}
+
               {/* User ID Field */}
               <div>
-                <label className="label-text">User Identification</label>
+                <label className="label-text">Email Address</label>
                 <div className="input-form">
                   <svg className="opacity-40" height={18} viewBox="0 0 24 24" fill="none" stroke="#1a2d5a" strokeWidth="2.5">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
                   </svg>
-                  <input type="text" className="input-field" placeholder="e.g. DISPATCH_CHIEF_01" required />
+                  <input
+                    type="email"
+                    name="email"
+                    className="input-field"
+                    placeholder="e.g. admin@skyledger.com"
+                    required
+                    disabled={isLoading}
+                  />
                 </div>
               </div>
 
@@ -66,17 +113,19 @@ export default function LoginPage() {
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className="label-text mb-0">Security Key</label>
-                  <span className="text-[10px] text-[#60a5fa] font-black cursor-pointer hover:underline uppercase">Forgot Access?</span>
+                  <Link href="/login/forgot-password" className="text-[10px] text-[#60a5fa] font-black cursor-pointer hover:underline uppercase">Forgot Access?</Link>
                 </div>
                 <div className="input-form">
                   <svg className="opacity-40" height={18} viewBox="0 0 24 24" fill="none" stroke="#1a2d5a" strokeWidth="2.5">
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
-                  <input 
-                    type={showPassword ? "text" : "password"} 
-                    className="input-field" 
-                    placeholder="••••••••••••" 
-                    required 
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    className="input-field"
+                    placeholder="••••••••••••"
+                    required
+                    disabled={isLoading}
                   />
                   {/* Password Toggle Button */}
                   <button 
@@ -102,12 +151,12 @@ export default function LoginPage() {
               <label htmlFor="remember" className="text-[11px] text-slate-500 font-bold cursor-pointer">Remember terminal session</label>
             </div>
 
-            <button 
-              type="submit" 
-              className="btn-primary mt-6 group" 
-              disabled={!isVerified}
+            <button
+              type="submit"
+              className="btn-primary mt-6 group"
+              disabled={!isVerified || isLoading}
             >
-              INITIALIZE SESSION 
+              {isLoading ? 'AUTHENTICATING...' : 'INITIALIZE SESSION'}
               <span className="ml-2 transition-transform group-hover:translate-x-1">→</span>
             </button>
 

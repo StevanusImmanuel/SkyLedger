@@ -6,108 +6,95 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts';
 import { StatCardSkeleton, ChartSkeleton, RouteTableSkeleton, TableSkeleton, PieChartSkeleton } from '@/components/ui/skeletons';
+import { ClientTimestamp } from '@/components/ui/ClientTimestamp';
 
-// -- Data --
-const capacityData = [
-  { day: 'MON', inbound: 320, outbound: 280 },
-  { day: 'TUE', inbound: 380, outbound: 350 },
-  { day: 'WED', inbound: 290, outbound: 310 },
-  { day: 'THU', inbound: 420, outbound: 390 },
-  { day: 'FRI', inbound: 460, outbound: 430 },
-  { day: 'SAT', inbound: 380, outbound: 340 },
-  { day: 'SUN', inbound: 350, outbound: 370 },
-];
-
-const slaData = [
-  { name: 'Met (SLA-1)', value: 2104, color: '#1a2d5a' },
-  { name: 'Pending Review', value: 142, color: '#ef4444' },
-  { name: 'At Risk', value: 34, color: '#e2e8f0' },
-];
-
-const routes = [
-  {
-    id: 'A1',
-    sector: 'LHR → JFK',
-    desc: 'London Heathrow to John F. Kennedy',
-    flightId: 'BA-1\n78C',
-    weight: '342.5 MT',
-    util: 88,
-    utilColor: '#1a2d5a',
-    status: 'OPTIMAL',
-    statusClass: 'sl-badge-optimal',
-  },
-  {
-    id: 'A2',
-    sector: 'SIN → DXB',
-    desc: 'Going to Dubai Int',
-    flightId: 'EK-3\n55X',
-    weight: '298.1 MT',
-    util: 80,
-    utilColor: '#1a2d5a',
-    status: 'OPTIMAL',
-    statusClass: 'sl-badge-optimal',
-  },
-  {
-    id: 'A3',
-    sector: 'PVG → LAX',
-    desc: 'Pudong to Los Angeles',
-    flightId: 'CX-8\n80F',
-    weight: '210.4 MT',
-    util: 60,
-    utilColor: '#b45309',
-    status: 'MODERATE',
-    statusClass: 'sl-badge-moderate',
-  },
-  {
-    id: 'A4',
-    sector: 'FRA → HKG',
-    desc: 'Frankfurt to Hong Kong Intl',
-    flightId: 'LH-8\n224',
-    weight: '185.9 MT',
-    util: 75,
-    utilColor: '#1a2d5a',
-    status: 'OPTIMAL',
-    statusClass: 'sl-badge-optimal',
-  },
-  {
-    id: 'A5',
-    sector: 'CDG → ORD',
-    desc: 'Paris Charles de Gaulle to Chicago',
-    flightId: 'AF-7\n31B',
-    weight: '162.3 MT',
-    util: 55,
-    utilColor: '#1a2d5a',
-    status: 'OPTIMAL',
-    statusClass: 'sl-badge-optimal',
-  },
-];
-
-// Cargo table for flight status
-const cargoFlights = [
-  { awb: 'AWB-109281', origin: 'JFK', originCode: 'green', dest: 'LHR', destCode: 'green', flight: 'BA-178', status: 'ON-TIME', statusClass: 'sl-badge-ontime', weight: '2,340 kg', timestamp: '2026-04-13 08:45' },
-  { awb: 'AWB-216581', origin: 'LAX', originCode: 'blue', dest: 'NRT', destCode: 'blue', flight: 'JL-061', status: 'DEPARTED', statusClass: 'sl-badge-departed', weight: '1,875 kg', timestamp: '2026-04-13 09:12' },
-  { awb: 'AWB-154351', origin: 'ORD', originCode: 'purple', dest: 'FRA', destCode: 'purple', flight: 'LH-430', status: 'ON-TIME', statusClass: 'sl-badge-ontime', weight: '3,120 kg', timestamp: '2026-04-13 09:30' },
-  { awb: 'AWB-735198', origin: 'DXB', originCode: 'red', dest: 'SYD', destCode: 'red', flight: 'EK-413', status: 'DELAYED', statusClass: 'sl-badge-delayed', weight: '2,650 kg', timestamp: '2026-04-13 10:05' },
-  { awb: 'AWB-308123', origin: 'CDG', originCode: 'orange', dest: 'JFK', destCode: 'green', flight: 'AF-022', status: 'DEPARTED', statusClass: 'sl-badge-departed', weight: '1,920 kg', timestamp: '2026-04-13 10:22' },
-  { awb: 'AWB-476289', origin: 'AMS', originCode: 'blue', dest: 'DXB', destCode: 'red', flight: 'KL-781', status: 'DELAYED', statusClass: 'sl-badge-delayed', weight: '1,540 kg', timestamp: '2026-04-13 10:48' },
-];
+type DashboardData = {
+  stats: {
+    totalCargoTonnage: string;
+    activeShipments: number;
+    delayedShipments: number;
+    slaCompletion: string;
+    totalShipments: number;
+  };
+  capacityData: Array<{ day: string; inbound: number; outbound: number }>;
+  slaData: Array<{ name: string; value: number; color: string }>;
+  topRoutes: Array<{
+    id: string;
+    sector: string;
+    desc: string;
+    flightId: string;
+    weight: string;
+    shipmentCount: number;
+  }>;
+  cargoFlights: Array<{
+    awb: string;
+    origin: string;
+    dest: string;
+    flight: string;
+    status: string;
+    weight: string;
+    timestamp: string;
+  }>;
+};
 
 const statusIndicatorColor: Record<string, string> = {
-  'ON-TIME': '#10b981',
-  'DELAYED': '#ef4444',
-  'DEPARTED': '#3b82f6',
+  'in_transit': '#0ea5e9',
+  'delivered': '#10b981',
+  'delayed': '#ef4444',
+  'pending': '#8b5cf6',
+  'processing': '#8b5cf6',
+  'cancelled': '#ef4444',
+};
+
+const statusClassMap: Record<string, string> = {
+  'in_transit': 'sl-badge-intransit',
+  'delivered': 'sl-badge-ontime',
+  'delayed': 'sl-badge-delayed',
+  'pending': 'sl-badge-manifested',
+  'processing': 'sl-badge-departed',
+  'cancelled': 'sl-badge-delayed',
+};
+
+const airportColorMap: Record<string, string> = {
+  LHR: 'blue', JFK: 'green', SIN: 'orange', NRT: 'purple',
+  CDG: 'orange', FRA: 'purple', DXB: 'red', SYD: 'green',
+  HKG: 'blue', LAX: 'purple',
 };
 
 function DashboardContent() {
   const [isLoading, setIsLoading] = useState(true);
+  const [data, setData] = useState<DashboardData | null>(null);
 
   useEffect(() => {
-    console.log('Fetching dashboard data...');
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
-    return () => clearTimeout(timer);
+    async function fetchDashboard() {
+      try {
+        const res = await fetch('/api/dashboard/analytics');
+        const json = await res.json();
+        console.log('Dashboard API response:', json);
+        if (json.success) {
+          setData(json.data);
+        } else {
+          console.error('Dashboard API error:', json.error);
+        }
+      } catch (err) {
+        console.error('Failed to fetch dashboard data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchDashboard();
   }, []);
+
+  if (!data && !isLoading) {
+    return (
+      <div>
+        <div className="sl-page-header">
+          <h1 className="sl-page-title">Operations Analytics</h1>
+          <p className="sl-page-subtitle">Unable to load dashboard data. Please check your connection.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -165,7 +152,7 @@ function DashboardContent() {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
               </span>
             </div>
-            <div className="sl-stat-value">1,420.8<span className="unit">MT</span></div>
+            <div className="sl-stat-value">{data?.stats.totalCargoTonnage || '0'}<span className="unit">MT</span></div>
             <div className="sl-stat-meta up">↑ 12.5% vs Last Week</div>
           </div>
           <div className="sl-stat-card">
@@ -185,7 +172,7 @@ function DashboardContent() {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
               </span>
             </div>
-            <div className="sl-stat-value">98.4<span className="unit">%</span></div>
+            <div className="sl-stat-value">{data?.stats.slaCompletion || '0'}<span className="unit">%</span></div>
             <div className="sl-stat-meta up">↑ 0.8% Target Gain</div>
           </div>
           <div className="sl-stat-card">
@@ -225,7 +212,7 @@ function DashboardContent() {
               </div>
             </div>
             <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={capacityData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart data={data?.capacityData || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorInbound" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#1a2d5a" stopOpacity={0.3} />
@@ -258,7 +245,7 @@ function DashboardContent() {
             <div className="sl-donut-wrapper" style={{ position: 'relative' }}>
               <PieChart width={160} height={160}>
                 <Pie
-                  data={slaData}
+                  data={data?.slaData || []}
                   cx={75}
                   cy={75}
                   innerRadius={52}
@@ -268,19 +255,19 @@ function DashboardContent() {
                   endAngle={-270}
                   strokeWidth={0}
                 >
-                  {slaData.map((entry, index) => (
+                  {(data?.slaData || []).map((entry, index) => (
                     <Cell key={index} fill={entry.color} />
                   ))}
                 </Pie>
               </PieChart>
               <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>92%</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>{data?.stats.slaCompletion || '0'}%</div>
                 <div style={{ fontSize: 9, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compliant</div>
               </div>
             </div>
 
             <div className="sl-sla-legend">
-              {slaData.map((item) => (
+              {(data?.slaData || []).map((item) => (
                 <div key={item.name} className="sl-sla-legend-row">
                   <div className="sl-sla-legend-left">
                     <span className="sl-sla-legend-dot" style={{ background: item.color }} />
@@ -317,31 +304,38 @@ function DashboardContent() {
               </tr>
             </thead>
             <tbody>
-              {routes.map((route) => (
-                <tr key={route.id}>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                      <span className="sl-sector-badge">{route.id}</span>
-                      <div>
-                        <div className="sl-route-main">{route.sector}</div>
-                        <div className="sl-route-sub">{route.desc}</div>
+              {(data?.topRoutes || []).map((route) => {
+                const util = Math.min(Math.round((route.shipmentCount / 10) * 100), 100);
+                const utilColor = util >= 75 ? '#1a2d5a' : '#b45309';
+                const status = util >= 75 ? 'OPTIMAL' : 'MODERATE';
+                const statusClass = util >= 75 ? 'sl-badge-optimal' : 'sl-badge-moderate';
+
+                return (
+                  <tr key={route.id}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                        <span className="sl-sector-badge">{route.id}</span>
+                        <div>
+                          <div className="sl-route-main">{route.sector}</div>
+                          <div className="sl-route-sub">{route.desc}</div>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="sl-flight-id" style={{ whiteSpace: 'pre-line' }}>{route.flightId}</div>
-                  </td>
-                  <td><span className="sl-cargo-weight">{route.weight}</span></td>
-                  <td>
-                    <div className="sl-util-bar">
-                      <div className="sl-util-track">
-                        <div className="sl-util-fill" style={{ width: `${route.util}%`, background: route.utilColor }} />
+                    </td>
+                    <td>
+                      <div className="sl-flight-id" style={{ whiteSpace: 'pre-line' }}>{route.flightId}</div>
+                    </td>
+                    <td><span className="sl-cargo-weight">{route.weight}</span></td>
+                    <td>
+                      <div className="sl-util-bar">
+                        <div className="sl-util-track">
+                          <div className="sl-util-fill" style={{ width: `${util}%`, background: utilColor }} />
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td><span className={`sl-status-badge ${route.statusClass}`}>{route.status}</span></td>
-                </tr>
-              ))}
+                    </td>
+                    <td><span className={`sl-status-badge ${statusClass}`}>{status}</span></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -371,28 +365,41 @@ function DashboardContent() {
               </tr>
             </thead>
             <tbody>
-              {cargoFlights.map((flight, i) => (
-                <tr key={i}>
-                  <td style={{ paddingLeft: 20 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div className="sl-cargo-row-indicator" style={{ background: statusIndicatorColor[flight.status] }} />
-                      <span style={{ fontWeight: 700, fontSize: 12, color: '#1a2d5a' }}>{flight.awb}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <span className={`sl-airport-badge ${flight.originCode}`}>{flight.origin}</span>
-                    {' '}
-                    <span style={{ fontSize: 11.5, color: '#64748b' }}></span>
-                  </td>
-                  <td>
-                    <span className={`sl-airport-badge ${flight.destCode}`}>{flight.dest}</span>
-                  </td>
-                  <td><span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>{flight.flight}</span></td>
-                  <td><span className={`sl-status-badge ${flight.statusClass}`}>{flight.status}</span></td>
-                  <td><span style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>{flight.weight}</span></td>
-                  <td><span style={{ fontSize: 11.5, color: '#64748b' }}>{flight.timestamp}</span></td>
-                </tr>
-              ))}
+              {(data?.cargoFlights || []).map((flight, i) => {
+                const statusKey = flight.status.toLowerCase();
+                const statusClass = statusClassMap[statusKey] || 'sl-badge-manifested';
+                const indicatorColor = statusIndicatorColor[statusKey] || '#8b5cf6';
+                const originColor = airportColorMap[flight.origin] || 'blue';
+                const destColor = airportColorMap[flight.dest] || 'green';
+
+                return (
+                  <tr key={i}>
+                    <td style={{ paddingLeft: 20 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div className="sl-cargo-row-indicator" style={{ background: indicatorColor }} />
+                        <span style={{ fontWeight: 700, fontSize: 12, color: '#1a2d5a' }}>{flight.awb}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`sl-airport-badge ${originColor}`}>{flight.origin}</span>
+                      {' '}
+                      <span style={{ fontSize: 11.5, color: '#64748b' }}></span>
+                    </td>
+                    <td>
+                      <span className={`sl-airport-badge ${destColor}`}>{flight.dest}</span>
+                    </td>
+                    <td><span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>{flight.flight}</span></td>
+                    <td><span className={`sl-status-badge ${statusClass}`}>{flight.status.toUpperCase().replace('_', '-')}</span></td>
+                    <td><span style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>{flight.weight}</span></td>
+                    <td>
+                      <ClientTimestamp
+                        timestamp={flight.timestamp}
+                        style={{ fontSize: 11.5, color: '#64748b' }}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

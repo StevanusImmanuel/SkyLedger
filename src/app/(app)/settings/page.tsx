@@ -3,8 +3,10 @@ import { useEffect, useState } from 'react';
 
 export default function SettingsPage() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const savedTheme = (localStorage.getItem('theme') || 'light') as 'light' | 'dark';
     setTheme(savedTheme);
   }, []);
@@ -14,6 +16,10 @@ export default function SettingsPage() {
     localStorage.setItem('theme', newTheme);
     document.documentElement.setAttribute('data-theme', newTheme);
   };
+
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <div>
