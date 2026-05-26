@@ -24,11 +24,16 @@ const nextConfig: NextConfig = {
   // Disable source maps in development for faster builds
   productionBrowserSourceMaps: false,
 
-  // Experimental features for Vercel deployment
+  // Experimental features
   experimental: {
     serverActions: {
       bodySizeLimit: '2mb',
     },
+  },
+
+  // Disable file tracing for middleware to fix Vercel deployment
+  outputFileTracingIncludes: {
+    '/': ['./middleware.ts'],
   },
 };
 
