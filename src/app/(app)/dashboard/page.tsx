@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { StatCardSkeleton, ChartSkeleton, RouteTableSkeleton, TableSkeleton, PieChartSkeleton } from '@/components/ui/skeletons';
 import { ClientTimestamp } from '@/components/ui/ClientTimestamp';
+import { exportToCSV, exportToPDF } from '@/lib/utils/export';
 
 type DashboardData = {
   stats: {
@@ -64,11 +65,34 @@ const airportColorMap: Record<string, string> = {
 function DashboardContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
+  const [duration, setDuration] = useState<'week' | 'month' | 'year'>('week');
+  const [airports, setAirports] = useState<Array<{ id: number; iataCode: string; name: string }>>([]);
+  const [selectedAirport, setSelectedAirport] = useState<string>('all');
+
+  useEffect(() => {
+    async function fetchAirports() {
+      try {
+        const res = await fetch('/api/airports');
+        const json = await res.json();
+        if (json.success) {
+          setAirports(json.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch airports:', err);
+      }
+    }
+    fetchAirports();
+  }, []);
 
   useEffect(() => {
     async function fetchDashboard() {
+      setIsLoading(true);
       try {
-        const res = await fetch('/api/dashboard/analytics');
+        const params = new URLSearchParams({ duration });
+        if (selectedAirport !== 'all') {
+          params.set('airport', selectedAirport);
+        }
+        const res = await fetch(`/api/dashboard/analytics?${params}`);
         const json = await res.json();
         console.log('Dashboard API response:', json);
         if (json.success) {
@@ -83,7 +107,7 @@ function DashboardContent() {
       }
     }
     fetchDashboard();
-  }, []);
+  }, [duration, selectedAirport]);
 
   if (!data && !isLoading) {
     return (
@@ -107,140 +131,131 @@ function DashboardContent() {
       {/* Filters */}
       <div className="sl-filters-row">
         <div className="sl-period-tabs">
-          <button className="sl-period-tab active">WEEK</button>
-          <button className="sl-period-tab">MONTH</button>
-          <button className="sl-period-tab">YEAR</button>
+          <button
+            className={`sl-period-tab ${duration === 'week' ? 'active' : ''}`}
+            onClick={() => setDuration('week')}
+            style={{ transition: 'all 0.3s ease' }}
+          >
+            WEEK
+          </button>
+          <button
+            className={`sl-period-tab ${duration === 'month' ? 'active' : ''}`}
+            onClick={() => setDuration('month')}
+            style={{ transition: 'all 0.3s ease' }}
+          >
+            MONTH
+          </button>
+          <button
+            className={`sl-period-tab ${duration === 'year' ? 'active' : ''}`}
+            onClick={() => setDuration('year')}
+            style={{ transition: 'all 0.3s ease' }}
+          >
+            YEAR
+          </button>
         </div>
-        <select className="sl-filter-select" style={{ padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 11.5, color: '#475569', background: '#fff', cursor: 'pointer' }}>
-          <option>Terminal: All</option>
-          <option>Terminal: A</option>
-          <option>Terminal: B</option>
-        </select>
-        <select className="sl-filter-select" style={{ padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 11.5, color: '#475569', background: '#fff', cursor: 'pointer' }}>
-          <option>Flight Type: Heavy</option>
-          <option>Flight Type: Medium</option>
-          <option>Flight Type: Light</option>
+        <select
+          className="sl-filter-select"
+          style={{ padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 11.5, color: '#475569', background: '#fff', cursor: 'pointer' }}
+          value={selectedAirport}
+          onChange={(e) => setSelectedAirport(e.target.value)}
+        >
+          <option value="all">Airport: All</option>
+          {airports.map(airport => (
+            <option key={airport.id} value={airport.iataCode}>
+              {airport.iataCode} - {airport.name}
+            </option>
+          ))}
         </select>
       </div>
 
       {/* Export Buttons */}
       <div className="sl-export-btns">
-        <button className="sl-btn-export sl-btn-csv">
+        <button
+          className="sl-btn-export sl-btn-csv"
+          onClick={() => {
+            if (data?.cargoFlights) {
+              const exportData = data.cargoFlights.map(f => ({
+                AWB: f.awb,
+                Origin: f.origin,
+                Destination: f.dest,
+                Flight: f.flight,
+                Status: f.status,
+                Weight: f.weight,
+                Timestamp: new Date(f.timestamp).toLocaleString(),
+              }));
+              exportToCSV(exportData, 'dashboard_cargo_flights');
+            }
+          }}
+        >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           CSV
         </button>
-        <button className="sl-btn-export sl-btn-pdf">
+        <button
+          className="sl-btn-export sl-btn-pdf"
+          onClick={() => {
+            if (data?.cargoFlights) {
+              const exportData = data.cargoFlights.map(f => ({
+                AWB: f.awb,
+                Origin: f.origin,
+                Destination: f.dest,
+                Flight: f.flight,
+                Status: f.status,
+                Weight: f.weight,
+                Timestamp: new Date(f.timestamp).toLocaleString(),
+              }));
+              exportToPDF(exportData, 'dashboard_cargo_flights', 'Dashboard - Cargo Flights Report');
+            }
+          }}
+        >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           PDF Report
         </button>
       </div>
 
-      {/* Stats Cards */}
-      {isLoading ? (
-        <div className="sl-stats-grid">
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-        </div>
-      ) : (
-        <div className="sl-stats-grid">
-          <div className="sl-stat-card">
-            <div className="sl-stat-header">
-              <span className="sl-stat-label">Total Cargo Tonnage</span>
-              <span className="sl-stat-icon">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-              </span>
-            </div>
-            <div className="sl-stat-value">{data?.stats.totalCargoTonnage || '0'}<span className="unit">MT</span></div>
-            <div className="sl-stat-meta up">↑ 12.5% vs Last Week</div>
-          </div>
-          <div className="sl-stat-card">
-            <div className="sl-stat-header">
-              <span className="sl-stat-label">Avg. Processing Time</span>
-              <span className="sl-stat-icon">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              </span>
-            </div>
-            <div className="sl-stat-value">4.2<span className="unit">HRS</span></div>
-            <div className="sl-stat-meta neutral">— Stable Performance</div>
-          </div>
-          <div className="sl-stat-card">
-            <div className="sl-stat-header">
-              <span className="sl-stat-label">SLA Completion</span>
-              <span className="sl-stat-icon">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-              </span>
-            </div>
-            <div className="sl-stat-value">{data?.stats.slaCompletion || '0'}<span className="unit">%</span></div>
-            <div className="sl-stat-meta up">↑ 0.8% Target Gain</div>
-          </div>
-          <div className="sl-stat-card">
-            <div className="sl-stat-header">
-              <span className="sl-stat-label">Active Fleet Capacity</span>
-              <span className="sl-stat-icon">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.8 19.2L16 11l3.5-3.5C21 6 21 4 21 4s-2 0-3.5 1.5L14 9 5.8 7.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 3.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
-              </span>
-            </div>
-            <div className="sl-stat-value">82<span className="unit">%</span></div>
-            <div className="sl-stat-bar"><div className="sl-stat-bar-fill" style={{ width: '82%' }} /></div>
-          </div>
-        </div>
-      )}
-
       {/* Charts Row */}
       <div className="sl-charts-grid">
-        {/* Capacity Utilization Trend */}
+        {/* Weight Volume Trend */}
         {isLoading ? (
           <ChartSkeleton />
         ) : (
           <div className="sl-chart-card">
             <div className="sl-chart-header">
               <div>
-                <p className="sl-chart-title">Capacity Utilization Trend</p>
-                <p className="sl-chart-subtitle">Cargo volume past 7 days</p>
+                <p className="sl-chart-title">Weight Volume Trend</p>
+                <p className="sl-chart-subtitle">Total cargo weight past 7 days</p>
               </div>
               <div className="sl-chart-legend">
                 <span className="sl-legend-item">
                   <span className="sl-legend-dot" style={{ background: '#1a2d5a' }} />
-                  Inbound
-                </span>
-                <span className="sl-legend-item">
-                  <span className="sl-legend-dot" style={{ background: '#60a5fa' }} />
-                  Outbound
+                  Total Weight (MT)
                 </span>
               </div>
             </div>
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={data?.capacityData || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="colorInbound" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#1a2d5a" stopOpacity={0.3} />
                     <stop offset="95%" stopColor="#1a2d5a" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorOutbound" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#60a5fa" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" />
                 <XAxis dataKey="day" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                <Area type="monotone" dataKey="inbound" stroke="#1a2d5a" strokeWidth={2} fill="url(#colorInbound)" />
-                <Area type="monotone" dataKey="outbound" stroke="#60a5fa" strokeWidth={2} fill="url(#colorOutbound)" />
+                <Area type="monotone" dataKey="inbound" stroke="#1a2d5a" strokeWidth={2} fill="url(#colorWeight)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         )}
 
-        {/* SLA Performance Index */}
+        {/* Status Distribution */}
         {isLoading ? (
           <PieChartSkeleton />
         ) : (
           <div className="sl-sla-card">
-            <p className="sl-sla-title">SLA Performance Index</p>
-            <p className="sl-sla-subtitle">Service Level Targets</p>
+            <p className="sl-sla-title">Shipment Status Distribution</p>
+            <p className="sl-sla-subtitle">Current shipment statuses</p>
 
             <div className="sl-donut-wrapper" style={{ position: 'relative' }}>
               <PieChart width={160} height={160}>
@@ -261,8 +276,8 @@ function DashboardContent() {
                 </Pie>
               </PieChart>
               <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>{data?.stats.slaCompletion || '0'}%</div>
-                <div style={{ fontSize: 9, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compliant</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>{data?.stats.totalShipments || '0'}</div>
+                <div style={{ fontSize: 9, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total</div>
               </div>
             </div>
 

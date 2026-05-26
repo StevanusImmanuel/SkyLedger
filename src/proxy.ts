@@ -1,55 +1,41 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export async function proxy(request: NextRequest) {
-  const token = request.cookies.get('terminal_session')?.value;
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Define all protected terminal routes
-  const protectedRoutes = ['/dashboard', '/shipments', '/reports', '/settings'];
+  // Public routes that don't require authentication
+  const publicRoutes = ['/login', '/login/auth', '/login/register', '/login/forgot-password', '/login/reset-password'];
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
 
-  // Routes that should redirect to dashboard if already authenticated
-  const authRoutes = ['/login/auth', '/login/register'];
+  // Check for session token
+  const token = request.cookies.get('terminal_session')?.value;
 
-  // Check if the current path starts with any of the protected routes
-  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
-  const isAuthRoute = authRoutes.some(route => pathname.startsWith(route));
-
-  // If accessing a protected route without a token, redirect to login
-  if (isProtectedRoute && !token) {
-    return NextResponse.redirect(new URL('/login/restricted', request.url));
+  // If accessing protected route without token, redirect to login
+  if (!isPublicRoute && !token && pathname.startsWith('/')) {
+    const loginUrl = new URL('/login/auth', request.url);
+    return NextResponse.redirect(loginUrl);
   }
 
-  // If accessing auth routes with a token, verify it and redirect to dashboard if valid
-  if (isAuthRoute && token) {
-    try {
-      const verifyRes = await fetch(new URL('/api/users?me=true', request.url), {
-        headers: {
-          Cookie: `terminal_session=${token}`,
-        },
-      });
-
-      if (verifyRes.ok) {
-        // Token is valid, redirect to dashboard
-        return NextResponse.redirect(new URL('/dashboard', request.url));
-      }
-    } catch (err) {
-      // If verification fails, allow access to auth routes
-      console.error('Token verification failed:', err);
-    }
+  // If accessing login page with valid token, redirect to dashboard
+  if (isPublicRoute && token && pathname !== '/login/reset-password') {
+    const dashboardUrl = new URL('/dashboard', request.url);
+    return NextResponse.redirect(dashboardUrl);
   }
 
   return NextResponse.next();
 }
 
-// CRITICAL: Update the matcher to include all folders you want to protect
 export const config = {
   matcher: [
-    '/dashboard/:path*',
-    '/shipments/:path*',
-    '/reports/:path*',
-    '/settings/:path*',
-    '/login/auth',
-    '/login/register',
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public folder
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\..*|public).*)',
   ],
 };

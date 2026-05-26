@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
           status: s.status,
           origin: s.originAirport?.iataCode,
           dest: s.destAirport?.iataCode,
-          flight: s.flight?.flightId,
+          flight: s.flight?.id,
         })),
         sampleUsers: sampleUsers.map(u => ({
           skyledgerId: u.skyledgerId,

@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
   Package,
@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import { useNotifications } from "@/components/ui/notification-provider";
 
 const sidebarVariants = {
   open: {
@@ -84,7 +85,9 @@ export function SessionNavBar() {
   const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(false);
   const pathname = usePathname();
+  const { notifications, removeNotification, clearAll } = useNotifications();
 
   useEffect(() => {
     setMounted(true);
@@ -278,10 +281,21 @@ export function SessionNavBar() {
 
                 {/* Notification Button */}
                 <button
-                  className="flex h-8 w-full flex-row items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-[#94a3b8] transition-all hover:bg-[#f1f5f9] hover:text-[#1e293b]"
+                  className={cn(
+                    "flex h-8 w-full flex-row items-center gap-2.5 px-3.5 py-2 text-xs font-medium transition-all hover:bg-[#f1f5f9] hover:text-[#1e293b]",
+                    showNotifications ? "bg-[#f0f4ff] text-[#1a2d5a]" : "text-[#94a3b8]"
+                  )}
                   title="Notifications"
+                  onClick={() => setShowNotifications(!showNotifications)}
                 >
-                  <Bell className="h-4 w-4 shrink-0" strokeWidth={2} />
+                  <div className="relative">
+                    <Bell className="h-4 w-4 shrink-0" strokeWidth={2} />
+                    {notifications.length > 0 && (
+                      <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-red-500 text-[8px] font-bold text-white">
+                        {notifications.length}
+                      </span>
+                    )}
+                  </div>
                   <motion.span variants={variants}>
                     Notifications
                   </motion.span>
@@ -366,6 +380,85 @@ export function SessionNavBar() {
         </motion.ul>
       </motion.div>
     </motion.div>
+
+    {/* Notification Panel */}
+    <AnimatePresence>
+      {showNotifications && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setShowNotifications(false)}
+          />
+
+          {/* Notification Panel */}
+          <motion.div
+            className="fixed right-4 top-4 z-50 w-96 rounded-lg border border-[#e8edf4] bg-white shadow-xl"
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[#f0f4f8] px-4 py-3">
+              <h3 className="text-sm font-semibold text-[#1a2d5a]">Notifications</h3>
+              {notifications.length > 0 && (
+                <button
+                  onClick={clearAll}
+                  className="text-xs font-medium text-[#64748b] hover:text-[#1a2d5a]"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            {/* Notification List */}
+            <ScrollArea className="max-h-[500px]">
+              <div className="p-3">
+                {notifications.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <Bell className="mb-2 h-8 w-8 text-[#cbd5e1]" strokeWidth={1.5} />
+                    <p className="text-sm font-medium text-[#94a3b8]">No notifications</p>
+                    <p className="text-xs text-[#cbd5e1]">You're all caught up!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {notifications.map((notification) => (
+                      <div
+                        key={notification.id}
+                        className="rounded-lg border border-[#e8edf4] bg-white p-3 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <h4 className="text-sm font-semibold text-[#1a2d5a]">{notification.title}</h4>
+                            {notification.description && (
+                              <p className="mt-1 text-xs text-[#64748b]">{notification.description}</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => removeNotification(notification.id)}
+                            className="text-[#94a3b8] hover:text-[#1a2d5a]"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
     </>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBarcode,
@@ -39,6 +39,24 @@ type Airport = {
   country: string;
 };
 
+type Shipment = {
+  id: string;
+  awbNumber: string;
+  originAirport: { iataCode: string } | null;
+  destAirport: { iataCode: string } | null;
+  flight: {
+    airline: { airlineId: number } | null;
+    airplane: { airplaneId: number } | null;
+  } | null;
+  priority: string;
+  status: string;
+  deliveryStatus: string | null;
+  productType: string | null;
+  weightKg: string;
+  notes: string | null;
+  createdAt: string;
+};
+
 const PRODUCT_TYPES = [
   "General Cargo: Garments & Textiles",
   "General Cargo: Electronics",
@@ -50,15 +68,6 @@ const PRODUCT_TYPES = [
   "Special Cargo: Valuable Cargo",
   "Special Cargo: Oversized & Heavy Cargo",
   "Special Cargo: Human Remains",
-];
-
-const WEIGHT_UNITS = ["Kilogram", "Tonnes", "Pcs"];
-
-const DELIVERY_TYPES = [
-  "Airport-to-Airport (A2A)",
-  "Door-to-Door (D2D)",
-  "Door-to-Airport (D2A)",
-  "Airport-to-Door (A2D)",
 ];
 
 const DELIVERY_STATUSES = [
@@ -74,36 +83,92 @@ const DELIVERY_STATUSES = [
   "Delivered",
 ];
 
-export default function NewShipmentPage() {
+export default function EditShipmentPage() {
   const router = useRouter();
+  const params = useParams();
+  const shipmentId = params.id as string;
   const { addNotification } = useNotifications();
+
   const [airlines, setAirlines] = useState<Airline[]>([]);
   const [airplanes, setAirplanes] = useState<Airplane[]>([]);
   const [airports, setAirports] = useState<Airport[]>([]);
   const [selectedAirline, setSelectedAirline] = useState<number | null>(null);
   const [selectedAirplane, setSelectedAirplane] = useState<number | null>(null);
-  const [awbNumber, setAwbNumber] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Form fields
+  // Form fields (updatable fields from CRUDDB.md)
   const [formData, setFormData] = useState({
+    deliveryStatus: "",
+    productType: "",
     shippingDate: "",
-    sender: "",
-    receiver: "",
-    telpNumber: "",
+    productWeight: "",
     originAddress: "",
     destinationAddress: "",
     originIata: "",
     destIata: "",
-    productType: "",
-    productWeight: "",
-    weightUnit: "Kilogram",
-    deliveryType: "",
-    shippingFee: "",
-    deliveryStatus: "Booked",
-    priority: "standard",
     notes: "",
+    sender: "",
+    receiver: "",
+    telpNumber: "",
   });
+
+  // Fetch shipment data
+  useEffect(() => {
+    async function fetchShipment() {
+      try {
+        const res = await fetch(`/api/shipments/${shipmentId}`);
+        const data = await res.json();
+        if (data.success) {
+          const shipment: Shipment = data.data;
+
+          // Map delivery status enum to display format
+          const deliveryStatusMap: Record<string, string> = {
+            'booked': 'Booked',
+            'received_at_warehouse': 'Received at Warehouse',
+            'security_cleared': 'Security Cleared',
+            'manifested': 'Manifested',
+            'departed': 'Departed',
+            'transshipment': 'Transshipment',
+            'arrived_at_destination': 'Arrived at Destination Airports',
+            'out_for_delivery': 'Out for Delivery',
+            'ready_for_pickup': 'Ready for Pickup',
+            'delivered': 'Delivered',
+          };
+
+          const displayDeliveryStatus = shipment.deliveryStatus
+            ? deliveryStatusMap[shipment.deliveryStatus] || 'Booked'
+            : 'Booked';
+
+          setFormData({
+            deliveryStatus: displayDeliveryStatus,
+            productType: shipment.productType || "",
+            shippingDate: "",
+            productWeight: shipment.weightKg,
+            originAddress: "",
+            destinationAddress: "",
+            originIata: shipment.originAirport?.iataCode || "",
+            destIata: shipment.destAirport?.iataCode || "",
+            notes: shipment.notes || "",
+            sender: "",
+            receiver: "",
+            telpNumber: "",
+          });
+          if (shipment.flight?.airline?.airlineId) {
+            setSelectedAirline(shipment.flight.airline.airlineId);
+          }
+          if (shipment.flight?.airplane?.airplaneId) {
+            setSelectedAirplane(shipment.flight.airplane.airplaneId);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch shipment:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchShipment();
+  }, [shipmentId]);
 
   // Fetch airlines on mount
   useEffect(() => {
@@ -152,23 +217,16 @@ export default function NewShipmentPage() {
         }
       }
       fetchAirplanes();
-
-      // Generate AWB number with airline code
-      const airline = airlines.find(a => a.airlineId === selectedAirline);
-      if (airline) {
-        const randomNum = Math.floor(100000 + Math.random() * 900000);
-        setAwbNumber(`${airline.airlineCode}-${randomNum}`);
-      }
     }
-  }, [selectedAirline, airlines]);
+  }, [selectedAirline]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/shipments', {
-        method: 'POST',
+      const res = await fetch(`/api/shipments/${shipmentId}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           airlineId: selectedAirline,
@@ -182,8 +240,8 @@ export default function NewShipmentPage() {
       if (data.success) {
         addNotification({
           variant: 'success',
-          title: 'Shipment created successfully!',
-          description: `AWB Number: ${data.data.awbNumber}`,
+          title: 'Shipment updated successfully!',
+          description: 'All changes have been saved to the system.',
           primaryAction: {
             label: 'View shipments',
             onClick: () => router.push('/shipments'),
@@ -193,15 +251,15 @@ export default function NewShipmentPage() {
       } else {
         addNotification({
           variant: 'destructive',
-          title: 'Failed to create shipment',
-          description: data.error || 'An error occurred while creating the shipment.',
+          title: 'Failed to update shipment',
+          description: data.error || 'An error occurred while updating the shipment.',
         });
       }
     } catch (error) {
-      console.error('Failed to create shipment:', error);
+      console.error('Failed to update shipment:', error);
       addNotification({
         variant: 'destructive',
-        title: 'Failed to create shipment',
+        title: 'Failed to update shipment',
         description: 'An unexpected error occurred. Please try again.',
       });
     } finally {
@@ -214,30 +272,39 @@ export default function NewShipmentPage() {
   };
 
   // Shared classes for uniformity and readability
-  const heavyInput = "w-full bg-[#e9ecef] border-2 border-transparent py-5 px-5 rounded-lg font-mono text-2xl text-slate-900 font-bold focus:ring-0 focus:border-[#00236f] transition-all placeholder:text-slate-400 outline-none";
   const standardInput = "w-full bg-white border border-slate-300 rounded-lg p-4 font-bold text-base text-slate-900 focus:border-[#00236f] focus:ring-1 focus:ring-[#00236f] outline-none transition-all placeholder:text-slate-400";
   const selectStyle = "w-full bg-white border border-slate-300 rounded-lg p-4 text-base font-bold text-slate-900 focus:border-[#00236f] focus:ring-1 focus:ring-[#00236f] outline-none appearance-none cursor-pointer";
+
+  if (isLoading) {
+    return (
+      <div className="p-10 max-w-6xl mx-auto w-full">
+        <div className="text-center py-20">
+          <div className="text-slate-600">Loading shipment data...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-10 max-w-6xl mx-auto w-full animate-in fade-in duration-500">
       {/* Page Header */}
       <div className="mb-10">
         <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#00236f] bg-blue-100 px-2 py-1 rounded">
-          Logistics Entry
+          Logistics Update
         </span>
-        <h2 className="text-4xl font-bold mt-4 tracking-tight text-slate-900">Create New Shipment</h2>
+        <h2 className="text-4xl font-bold mt-4 tracking-tight text-slate-900">Edit Shipment</h2>
         <p className="text-slate-600 text-sm mt-1 font-medium">
-          Assign a new Air Waybill and manifest details to the flight ledger.
+          Update shipment details and manifest information.
         </p>
       </div>
 
       <form className="space-y-8" onSubmit={handleSubmit}>
 
-        {/* Section 1: Identification */}
+        {/* Section 1: Flight Information */}
         <div className="bg-[#f2f4f6] rounded-xl p-8 border-l-[6px] border-[#00236f]">
           <div className="flex items-center gap-3 mb-8 text-[#00236f]">
-            <FontAwesomeIcon icon={faBarcode} className="text-2xl" />
-            <h3 className="font-bold text-xl tracking-tight">Primary Identification</h3>
+            <FontAwesomeIcon icon={faPlaneDeparture} className="text-2xl" />
+            <h3 className="font-bold text-xl tracking-tight">Flight Information</h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -248,7 +315,6 @@ export default function NewShipmentPage() {
                   className={selectStyle}
                   value={selectedAirline || ""}
                   onChange={(e) => setSelectedAirline(Number(e.target.value))}
-                  required
                 >
                   <option value="">Select Airline</option>
                   {airlines.map((airline) => (
@@ -269,7 +335,6 @@ export default function NewShipmentPage() {
                   value={selectedAirplane || ""}
                   onChange={(e) => setSelectedAirplane(Number(e.target.value))}
                   disabled={!selectedAirline}
-                  required
                 >
                   <option value="">Select Airplane</option>
                   {airplanes.map((airplane) => (
@@ -283,29 +348,31 @@ export default function NewShipmentPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">AWB Number (Auto-Generated)</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={awbNumber}
-                  readOnly
-                  placeholder="Select airline first"
-                  className={heavyInput}
-                />
-                <FontAwesomeIcon icon={faInfoCircle} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 text-lg" />
-              </div>
-              <p className="text-[10px] text-slate-500 font-bold">Format: Airline Code + 6-digit number</p>
-            </div>
-
-            <div className="space-y-2">
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Shipping Date</label>
               <input
                 type="datetime-local"
                 className={standardInput}
                 value={formData.shippingDate}
                 onChange={(e) => handleInputChange('shippingDate', e.target.value)}
-                required
               />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Delivery Status</label>
+              <div className="relative">
+                <select
+                  className={selectStyle}
+                  value={formData.deliveryStatus}
+                  onChange={(e) => handleInputChange('deliveryStatus', e.target.value)}
+                >
+                  {DELIVERY_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+                <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
+              </div>
             </div>
           </div>
         </div>
@@ -326,7 +393,6 @@ export default function NewShipmentPage() {
                 className={standardInput}
                 value={formData.sender}
                 onChange={(e) => handleInputChange('sender', e.target.value)}
-                required
               />
             </div>
 
@@ -338,7 +404,6 @@ export default function NewShipmentPage() {
                 className={standardInput}
                 value={formData.receiver}
                 onChange={(e) => handleInputChange('receiver', e.target.value)}
-                required
               />
             </div>
 
@@ -351,7 +416,6 @@ export default function NewShipmentPage() {
                   className={standardInput}
                   value={formData.telpNumber}
                   onChange={(e) => handleInputChange('telpNumber', e.target.value)}
-                  required
                 />
                 <FontAwesomeIcon icon={faPhone} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               </div>
@@ -374,7 +438,6 @@ export default function NewShipmentPage() {
                   className={selectStyle}
                   value={formData.originIata}
                   onChange={(e) => handleInputChange('originIata', e.target.value)}
-                  required
                 >
                   <option value="">Select Origin</option>
                   {airports.map((airport) => (
@@ -394,7 +457,6 @@ export default function NewShipmentPage() {
                   className={selectStyle}
                   value={formData.destIata}
                   onChange={(e) => handleInputChange('destIata', e.target.value)}
-                  required
                 >
                   <option value="">Select Destination</option>
                   {airports.map((airport) => (
@@ -416,7 +478,6 @@ export default function NewShipmentPage() {
                   className={standardInput}
                   value={formData.originAddress}
                   onChange={(e) => handleInputChange('originAddress', e.target.value)}
-                  required
                 />
                 <FontAwesomeIcon icon={faMapMarkerAlt} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               </div>
@@ -431,39 +492,21 @@ export default function NewShipmentPage() {
                   className={standardInput}
                   value={formData.destinationAddress}
                   onChange={(e) => handleInputChange('destinationAddress', e.target.value)}
-                  required
                 />
                 <FontAwesomeIcon icon={faMapMarkerAlt} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Priority Level</label>
-              <div className="relative">
-                <select
-                  className={selectStyle}
-                  value={formData.priority}
-                  onChange={(e) => handleInputChange('priority', e.target.value)}
-                  required
-                >
-                  <option value="standard">Standard</option>
-                  <option value="express">Express</option>
-                  <option value="critical">Critical</option>
-                </select>
-                <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Section 4: Cargo & Product Details */}
+        {/* Section 4: Product Details */}
         <div className="bg-[#f2f4f6] rounded-xl p-8 border-l-[6px] border-amber-900">
           <div className="flex items-center gap-3 mb-8 text-amber-900">
             <FontAwesomeIcon icon={faBoxesStacked} className="text-2xl" />
             <h3 className="font-bold text-xl tracking-tight">Product Specifications</h3>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Product Type</label>
               <div className="relative">
@@ -471,7 +514,6 @@ export default function NewShipmentPage() {
                   className={selectStyle}
                   value={formData.productType}
                   onChange={(e) => handleInputChange('productType', e.target.value)}
-                  required
                 >
                   <option value="">Select Product Type</option>
                   {PRODUCT_TYPES.map((type) => (
@@ -485,7 +527,7 @@ export default function NewShipmentPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Product Weight</label>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Product Weight (KG)</label>
               <input
                 type="number"
                 step="0.001"
@@ -493,79 +535,7 @@ export default function NewShipmentPage() {
                 className={standardInput}
                 value={formData.productWeight}
                 onChange={(e) => handleInputChange('productWeight', e.target.value)}
-                required
               />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Weight Unit</label>
-              <div className="relative">
-                <select
-                  className={selectStyle}
-                  value={formData.weightUnit}
-                  onChange={(e) => handleInputChange('weightUnit', e.target.value)}
-                  required
-                >
-                  {WEIGHT_UNITS.map((unit) => (
-                    <option key={unit} value={unit}>
-                      {unit}
-                    </option>
-                  ))}
-                </select>
-                <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Delivery Type</label>
-              <div className="relative">
-                <select
-                  className={selectStyle}
-                  value={formData.deliveryType}
-                  onChange={(e) => handleInputChange('deliveryType', e.target.value)}
-                  required
-                >
-                  <option value="">Select Delivery Type</option>
-                  {DELIVERY_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-                <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Shipping Fee (USD)</label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                className={standardInput}
-                value={formData.shippingFee}
-                onChange={(e) => handleInputChange('shippingFee', e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Delivery Status</label>
-              <div className="relative">
-                <select
-                  className={selectStyle}
-                  value={formData.deliveryStatus}
-                  onChange={(e) => handleInputChange('deliveryStatus', e.target.value)}
-                  required
-                >
-                  {DELIVERY_STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-                <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
-              </div>
             </div>
           </div>
 
@@ -587,14 +557,14 @@ export default function NewShipmentPage() {
             onClick={() => router.back()}
             className="text-slate-600 font-black text-sm hover:text-slate-900 transition-colors tracking-tight uppercase"
           >
-            Cancel Entry
+            Cancel
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
             className="bg-[#00236f] text-white px-12 py-5 rounded-xl font-black shadow-2xl shadow-blue-900/40 hover:bg-[#001a42] hover:-translate-y-1 active:translate-y-0 transition-all text-sm uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSubmitting ? 'Creating...' : 'Create Shipment'}
+            {isSubmitting ? 'Updating...' : 'Update Shipment'}
           </button>
         </div>
       </form>

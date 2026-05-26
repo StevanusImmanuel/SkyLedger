@@ -1,0 +1,41 @@
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { airplanes, airlines } from '@/lib/db/schema';
+import { eq, and } from 'drizzle-orm';
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const airlineId = searchParams.get('airlineId');
+
+    const whereConditions = airlineId
+      ? eq(airplanes.airlineId, parseInt(airlineId))
+      : undefined;
+
+    const allAirplanes = await db
+      .select({
+        airplaneId: airplanes.airplaneId,
+        flightNumber: airplanes.flightNumber,
+        model: airplanes.model,
+        capacity: airplanes.capacity,
+        airlineId: airplanes.airlineId,
+        airlineName: airlines.airlineName,
+        airlineCode: airlines.airlineCode,
+      })
+      .from(airplanes)
+      .leftJoin(airlines, eq(airplanes.airlineId, airlines.airlineId))
+      .where(whereConditions)
+      .orderBy(airplanes.flightNumber);
+
+    return NextResponse.json({
+      success: true,
+      data: allAirplanes,
+    });
+  } catch (error) {
+    console.error('Error fetching airplanes:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch airplanes' },
+      { status: 500 }
+    );
+  }
+}

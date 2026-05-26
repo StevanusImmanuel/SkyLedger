@@ -14,6 +14,19 @@ export const shipmentStatusEnum = pgEnum('shipment_status', [
   'cancelled',
 ]);
 
+export const deliveryStatusEnum = pgEnum('delivery_status', [
+  'booked',
+  'received_at_warehouse',
+  'security_cleared',
+  'manifested',
+  'departed',
+  'transshipment',
+  'arrived_at_destination',
+  'out_for_delivery',
+  'ready_for_pickup',
+  'delivered',
+]);
+
 export const shipments = pgTable('shipments', {
   id: uuid('id').primaryKey().defaultRandom(),
   awbNumber: varchar('awb_number', { length: 20 }).unique().notNull(),
@@ -25,6 +38,7 @@ export const shipments = pgTable('shipments', {
   quantity: integer('quantity'),
   weightKg: numeric('weight_kg', { precision: 10, scale: 3 }),
   status: shipmentStatusEnum('status').default('pending').notNull(),
+  deliveryStatus: deliveryStatusEnum('delivery_status').default('booked'),
   createdBy: uuid('created_by').references(() => users.id),
   estimatedDelivery: timestamp('estimated_delivery'),
   actualDelivery: timestamp('actual_delivery'),

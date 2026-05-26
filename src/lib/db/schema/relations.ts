@@ -2,6 +2,7 @@ import { relations } from 'drizzle-orm';
 import { users } from './users';
 import { sessions } from './sessions';
 import { airports } from './airports';
+import { airlines, airplanes } from './airlines';
 import { flights } from './flights';
 import { shipments, shipmentEvents } from './shipments';
 
@@ -22,7 +23,19 @@ export const airportsRelations = relations(airports, ({ many }) => ({
   destShipments: many(shipments, { relationName: 'destAirport' }),
 }));
 
+export const airlinesRelations = relations(airlines, ({ many }) => ({
+  airplanes: many(airplanes),
+  flights: many(flights),
+}));
+
+export const airplanesRelations = relations(airplanes, ({ one, many }) => ({
+  airline: one(airlines, { fields: [airplanes.airlineId], references: [airlines.airlineId] }),
+  flights: many(flights),
+}));
+
 export const flightsRelations = relations(flights, ({ one, many }) => ({
+  airline: one(airlines, { fields: [flights.airlineId], references: [airlines.airlineId] }),
+  airplane: one(airplanes, { fields: [flights.airplaneId], references: [airplanes.airplaneId] }),
   originAirport: one(airports, {
     fields: [flights.originAirportId],
     references: [airports.id],

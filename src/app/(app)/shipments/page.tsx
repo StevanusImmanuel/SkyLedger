@@ -1,9 +1,14 @@
 'use client';
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 import { Pagination } from '@/components/ui/Pagination';
 import { ShipmentTableSkeleton, StatCardSkeleton } from '@/components/ui/skeletons';
+import { MenuItem, MenuContainer } from '@/components/ui/fluid-menu';
+import { MoreVertical, Eye, Edit, Trash2 } from 'lucide-react';
+import { exportToCSV, exportToPDF } from '@/lib/utils/export';
+import { useNotifications } from '@/components/ui/notification-provider';
 
 type Shipment = {
   id: string;
@@ -13,7 +18,9 @@ type Shipment = {
   flight: { flightId: string } | null;
   priority: 'standard' | 'express' | 'critical';
   status: 'pending' | 'processing' | 'in_transit' | 'delivered' | 'delayed' | 'cancelled';
+  deliveryStatus: 'booked' | 'received_at_warehouse' | 'security_cleared' | 'manifested' | 'departed' | 'transshipment' | 'arrived_at_destination' | 'out_for_delivery' | 'ready_for_pickup' | 'delivered' | null;
   weightKg: string;
+  productType: string | null;
   createdAt: string;
 };
 
@@ -26,15 +33,6 @@ const priorityColor: Record<string, string> = {
   STANDARDTEXT: '#1d4ed8',
 };
 
-const statusClassMap: Record<string, string> = {
-  delayed: 'sl-badge-delayed',
-  in_transit: 'sl-badge-intransit',
-  pending: 'sl-badge-manifested',
-  processing: 'sl-badge-manifested',
-  delivered: 'sl-badge-ontime',
-  cancelled: 'sl-badge-delayed',
-};
-
 const statusIndicatorMap: Record<string, string> = {
   delayed: '#ef4444',
   in_transit: '#0ea5e9',
@@ -42,6 +40,35 @@ const statusIndicatorMap: Record<string, string> = {
   processing: '#8b5cf6',
   delivered: '#10b981',
   cancelled: '#ef4444',
+  // Delivery status colors
+  booked: '#8b5cf6',
+  received_at_warehouse: '#8b5cf6',
+  security_cleared: '#8b5cf6',
+  manifested: '#8b5cf6',
+  departed: '#0ea5e9',
+  transshipment: '#0ea5e9',
+  arrived_at_destination: '#10b981',
+  out_for_delivery: '#10b981',
+  ready_for_pickup: '#10b981',
+};
+
+const statusClassMap: Record<string, string> = {
+  delayed: 'sl-badge-delayed',
+  in_transit: 'sl-badge-intransit',
+  pending: 'sl-badge-manifested',
+  processing: 'sl-badge-manifested',
+  delivered: 'sl-badge-ontime',
+  cancelled: 'sl-badge-delayed',
+  // Delivery status classes
+  booked: 'sl-badge-manifested',
+  received_at_warehouse: 'sl-badge-manifested',
+  security_cleared: 'sl-badge-manifested',
+  manifested: 'sl-badge-manifested',
+  departed: 'sl-badge-intransit',
+  transshipment: 'sl-badge-intransit',
+  arrived_at_destination: 'sl-badge-ontime',
+  out_for_delivery: 'sl-badge-ontime',
+  ready_for_pickup: 'sl-badge-ontime',
 };
 
 const airportColorMap: Record<string, string> = {
@@ -56,8 +83,54 @@ function ShipmentsContent() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [stats, setStats] = useState({
+    active: 0,
+    activePercentage: 0,
+    arrived: 0,
+    arrivedPercentage: 0,
+    totalWeight: 0,
+  });
   const itemsPerPage = 6;
-  const debouncedSearch = useDebounce(search, 800); // Increased from 500ms to 800ms
+  const debouncedSearch = useDebounce(search, 800);
+  const router = useRouter();
+  const { addNotification } = useNotifications();
+
+  const handleDelete = async (shipmentId: string) => {
+    if (!confirm('Are you sure you want to delete this shipment?')) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/shipments/${shipmentId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        addNotification({
+          variant: 'success',
+          title: 'Shipment deleted successfully!',
+          description: 'The shipment has been removed from the system.',
+        });
+        // Refresh the shipments list
+        window.location.reload();
+      } else {
+        addNotification({
+          variant: 'destructive',
+          title: 'Failed to delete shipment',
+          description: data.error || 'An error occurred while deleting the shipment.',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to delete shipment:', error);
+      addNotification({
+        variant: 'destructive',
+        title: 'Failed to delete shipment',
+        description: 'An unexpected error occurred. Please try again.',
+      });
+    }
+  };
 
   useEffect(() => {
     async function fetchShipments() {
@@ -77,6 +150,44 @@ function ShipmentsContent() {
         if (json.success) {
           setShipments(json.data);
           setTotal(json.total);
+
+          // Calculate stats from all shipments (not just current page)
+          const allShipmentsRes = await fetch('/api/shipments?limit=1000');
+          const allShipmentsJson = await allShipmentsRes.json();
+
+          if (allShipmentsJson.success) {
+            const allShipments = allShipmentsJson.data;
+
+            // Active: before Post-Flight (pending, processing, in_transit)
+            const activeShipments = allShipments.filter((s: Shipment) =>
+              ['pending', 'processing', 'in_transit'].includes(s.status)
+            );
+            const activeCount = activeShipments.length;
+
+            // Arrived: Post-Flight statuses (arrived_at_destination, out_for_delivery, ready_for_pickup, delivered)
+            const arrivedShipments = allShipments.filter((s: Shipment) =>
+              s.deliveryStatus && ['arrived_at_destination', 'out_for_delivery', 'ready_for_pickup', 'delivered'].includes(s.deliveryStatus)
+            );
+            const arrivedCount = arrivedShipments.length;
+
+            // Total weight of active shipments
+            const totalWeight = activeShipments.reduce((sum: number, s: Shipment) =>
+              sum + Number(s.weightKg), 0
+            );
+
+            // Calculate percentages (compare to total)
+            const totalCount = allShipments.length;
+            const activePercentage = totalCount > 0 ? ((activeCount / totalCount) * 100) : 0;
+            const arrivedPercentage = totalCount > 0 ? ((arrivedCount / totalCount) * 100) : 0;
+
+            setStats({
+              active: activeCount,
+              activePercentage: Math.round(activePercentage),
+              arrived: arrivedCount,
+              arrivedPercentage: Math.round(arrivedPercentage),
+              totalWeight: Math.round(totalWeight),
+            });
+          }
         } else {
           console.error('Shipments API error:', json.error);
         }
@@ -113,61 +224,43 @@ function ShipmentsContent() {
           </svg>
           Flight Status
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
-          <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: '1px solid #e2e8f0', borderRadius: 7, background: '#fff', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
-            Filter
-          </button>
-          <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: '1px solid #e2e8f0', borderRadius: 7, background: '#fff', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-            Export CSV
-          </button>
-        </div>
       </div>
 
       {/* Page Header */}
       <div style={{ marginBottom: 16 }}>
         <h1 className="sl-page-title">Active Manifests</h1>
-        <p className="sl-page-subtitle">Monitoring 248 active live-shipments across global routes.</p>
+        <p className="sl-page-subtitle">Monitoring 24/7 active live-shipments across global routes.</p>
       </div>
 
       {/* Stats Cards */}
       {isLoading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
-          <StatCardSkeleton />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
           <StatCardSkeleton />
           <StatCardSkeleton />
           <StatCardSkeleton />
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
           <div className="sl-stat-card">
             <div className="sl-stat-header">
               <span className="sl-stat-label">Active</span>
             </div>
-            <div className="sl-stat-value" style={{ fontSize: 32 }}>{shipments.filter(s => s.status === 'in_transit').length}</div>
-            <div className="sl-stat-meta up">↑ +18%</div>
+            <div className="sl-stat-value" style={{ fontSize: 32 }}>{stats.active}</div>
+            <div className="sl-stat-meta up">↑ +{stats.activePercentage}%</div>
           </div>
           <div className="sl-stat-card">
             <div className="sl-stat-header">
-              <span className="sl-stat-label">Delayed</span>
+              <span className="sl-stat-label">Arrived</span>
             </div>
-            <div className="sl-stat-value" style={{ fontSize: 32, color: '#ef4444' }}>{shipments.filter(s => s.status === 'delayed').length.toString().padStart(2, '0')}</div>
-            <div className="sl-stat-meta" style={{ color: '#ef4444', fontWeight: 600 }}>↓ -4%</div>
+            <div className="sl-stat-value" style={{ fontSize: 32 }}>{stats.arrived.toString().padStart(2, '0')}</div>
+            <div className="sl-stat-meta up">↑ +{stats.arrivedPercentage}%</div>
           </div>
           <div className="sl-stat-card">
             <div className="sl-stat-header">
-              <span className="sl-stat-label">Priority Weight</span>
+              <span className="sl-stat-label">Product Weight</span>
             </div>
-            <div className="sl-stat-value" style={{ fontSize: 32 }}>{shipments.filter(s => s.priority === 'critical' || s.priority === 'express').length}</div>
-            <div className="sl-stat-meta neutral">— Planned</div>
-          </div>
-          <div className="sl-stat-card">
-            <div className="sl-stat-header">
-              <span className="sl-stat-label">Total Tonnage</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></svg>
-            </div>
-            <div className="sl-stat-value" style={{ fontSize: 32 }}>{Math.round(shipments.reduce((sum, s) => sum + Number(s.weightKg), 0) / 1000)}<span className="unit">T</span></div>
+            <div className="sl-stat-value" style={{ fontSize: 32 }}>{(stats.totalWeight / 1000).toFixed(1)}<span className="unit">T</span></div>
+            <div className="sl-stat-meta neutral">— Active Total</div>
           </div>
         </div>
       )}
@@ -182,7 +275,7 @@ function ShipmentsContent() {
               <tr>
                 <th style={{ paddingLeft: 20 }}>AWB Number</th>
                 <th>Destination</th>
-                <th>Flight ID</th>
+                <th>Product Type</th>
                 <th>Priority</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -193,9 +286,15 @@ function ShipmentsContent() {
                 const pKey = s.priority.toUpperCase();
                 const bgColor = priorityColor[pKey] || '#f1f5f9';
                 const textColor = priorityColor[`${pKey}TEXT`] || '#475569';
-                const statusClass = statusClassMap[s.status] || 'sl-badge-manifested';
-                const indicatorColor = statusIndicatorMap[s.status] || '#8b5cf6';
+                const statusKey = s.deliveryStatus || s.status;
+                const statusClass = statusClassMap[statusKey] || 'sl-badge-manifested';
+                const indicatorColor = statusIndicatorMap[statusKey] || '#8b5cf6';
                 const destColor = airportColorMap[s.destAirport?.iataCode || ''] || 'blue';
+
+                // Format delivery status for display
+                const displayStatus = s.deliveryStatus
+                  ? s.deliveryStatus.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                  : s.status.replace('_', '-').toUpperCase();
 
                 return (
                   <tr key={s.id} style={{ cursor: 'pointer' }}>
@@ -212,7 +311,7 @@ function ShipmentsContent() {
                       </div>
                     </td>
                     <td>
-                      <span style={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>{s.flight?.flightId || 'N/A'}</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>{s.productType || 'N/A'}</span>
                     </td>
                     <td>
                       <span style={{
@@ -226,23 +325,25 @@ function ShipmentsContent() {
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         <div style={{ width: 6, height: 6, borderRadius: '50%', background: indicatorColor }} />
-                        <span className={`sl-status-badge ${statusClass}`}>{s.status.replace('_', '-').toUpperCase()}</span>
+                        <span className={`sl-status-badge ${statusClass}`}>{displayStatus}</span>
                       </div>
                     </td>
                     <td>
-                      <Link
-                        href={`/shipments/${s.id}`}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          width: 28, height: 28, color: '#94a3b8', borderRadius: 6,
-                          border: '1px solid #e2e8f0', background: '#fff', textDecoration: 'none',
-                        }}
-                        title="View Detail"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" />
-                        </svg>
-                      </Link>
+                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <MenuContainer>
+                          <MenuItem
+                            icon={<MoreVertical size={18} strokeWidth={1.5} />}
+                          />
+                          <MenuItem
+                            icon={<Edit size={18} strokeWidth={1.5} />}
+                            onClick={() => router.push(`/shipments/${s.id}/edit`)}
+                          />
+                          <MenuItem
+                            icon={<Trash2 size={18} strokeWidth={1.5} />}
+                            onClick={() => handleDelete(s.id)}
+                          />
+                        </MenuContainer>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -259,25 +360,6 @@ function ShipmentsContent() {
           />
         </div>
       )}
-
-      {/* Bottom Cards (Manifest Loading) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
-        {[
-          { label: 'Manifest Loading', time: 'Bay 01 • 11:30 AM', color: '#dbeafe', icon: '📦' },
-          { label: 'Manifest Loading', time: 'Bay 04 • 12:15 AM', color: '#dcfce7', icon: '📦' },
-          { label: 'Manifest Loading', time: 'Bay 07 • 01:00 PM', color: '#fef3c7', icon: '📦' },
-        ].map((card, i) => (
-          <div key={i} style={{ background: '#fff', borderRadius: 10, border: '1px solid #e8edf4', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 36, height: 36, background: card.color, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
-              {card.icon}
-            </div>
-            <div>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a' }}>{card.label}</div>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>{card.time}</div>
-            </div>
-          </div>
-        ))}
-      </div>
 
       {/* New Shipment Button */}
       <Link
@@ -298,7 +380,7 @@ function ShipmentsContent() {
 
 export default function ShipmentsPage() {
   return (
-    <Suspense fallback={<ShipmentTableSkeleton rows={6} />}>
+    <Suspense fallback={<ShipmentTableSkeleton rows={10} />}>
       <ShipmentsContent />
     </Suspense>
   );

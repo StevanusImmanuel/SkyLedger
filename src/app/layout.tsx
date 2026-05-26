@@ -1,6 +1,7 @@
 import "./globals.css";
 import "./dark-theme.css";
 import { Inter } from "next/font/google";
+import { NotificationProvider } from "@/components/ui/notification-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -28,7 +29,9 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className} suppressHydrationWarning>
-        {children}
+        <NotificationProvider>
+          {children}
+        </NotificationProvider>
       </body>
     </html>
   );

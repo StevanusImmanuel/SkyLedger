@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { shipments, flights, airports } from '@/lib/db/schema';
+import { shipments, flights, airports, airlines, airplanes } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
 import { sql, eq, and, gte, desc, count } from 'drizzle-orm';
 
@@ -15,9 +15,30 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    // Get date range for weekly data
+    // Get duration parameter (default: week)
+    const { searchParams } = new URL(request.url);
+    const duration = searchParams.get('duration') || 'week';
+
+    // Calculate date range based on duration
     const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    let startDate: Date;
+    let daysCount: number;
+
+    switch (duration) {
+      case 'month':
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        daysCount = 30;
+        break;
+      case 'year':
+        startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+        daysCount = 12; // Show 12 months
+        break;
+      case 'week':
+      default:
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        daysCount = 7;
+        break;
+    }
 
     // Stats: Total cargo tonnage (sum of all shipments weight)
     const [totalCargoResult] = await db
@@ -43,7 +64,7 @@ export async function GET(request: NextRequest) {
     // SLA completion percentage (delivered / total)
     const slaCompletion = totalShipments > 0 ? (deliveredCount / totalShipments) * 100 : 0;
 
-    // Capacity utilization by day (last 7 days) - simplified to avoid empty data
+    // Capacity utilization by day/month/year based on duration
     const capacityDataRaw = await db
       .select({
         day: sql<string>`TO_CHAR(${shipments.createdAt}, 'DY')`,
@@ -52,60 +73,86 @@ export async function GET(request: NextRequest) {
         outbound: sql<number>`COALESCE(SUM(CASE WHEN ${shipments.status} = 'delivered' THEN CAST(${shipments.weightKg} AS NUMERIC) ELSE 0 END), 0)`,
       })
       .from(shipments)
-      .where(gte(shipments.createdAt, weekAgo))
+      .where(gte(shipments.createdAt, startDate))
       .groupBy(sql`DATE(${shipments.createdAt})`, sql`TO_CHAR(${shipments.createdAt}, 'DY')`)
       .orderBy(sql`DATE(${shipments.createdAt})`);
 
-    // Fill in missing days with zeros
-    const daysOfWeek = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-    const capacityData = daysOfWeek.map(day => {
-      const found = capacityDataRaw.find(d => d.day.toUpperCase() === day);
-      return {
-        day,
-        inbound: found ? Math.round(Number(found.inbound) / 1000) : 0,
-        outbound: found ? Math.round(Number(found.outbound) / 1000) : 0,
-      };
-    });
+    // Format capacity data based on duration
+    let capacityData;
+    if (duration === 'week') {
+      const daysOfWeek = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+      capacityData = daysOfWeek.map(day => {
+        const found = capacityDataRaw.find(d => d.day.toUpperCase() === day);
+        return {
+          day,
+          inbound: found ? Math.round(Number(found.inbound) / 1000) : 0,
+          outbound: found ? Math.round(Number(found.outbound) / 1000) : 0,
+        };
+      });
+    } else if (duration === 'month') {
+      // Group by week for month view
+      capacityData = capacityDataRaw.map(d => ({
+        day: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        inbound: Math.round(Number(d.inbound) / 1000),
+        outbound: Math.round(Number(d.outbound) / 1000),
+      }));
+    } else {
+      // Group by month for year view
+      capacityData = capacityDataRaw.map(d => ({
+        day: new Date(d.date).toLocaleDateString('en-US', { month: 'short' }),
+        inbound: Math.round(Number(d.inbound) / 1000),
+        outbound: Math.round(Number(d.outbound) / 1000),
+      }));
+    }
 
-    // SLA data for pie chart
+    // SLA data for pie chart - now showing actual shipment statuses
     const slaData = [
-      { name: 'Met (SLA-1)', value: deliveredCount, color: '#1a2d5a' },
-      { name: 'Pending Review', value: activeCount, color: '#ef4444' },
-      { name: 'At Risk', value: delayedCount, color: '#e2e8f0' },
+      { name: 'Delivered', value: deliveredCount, color: '#10b981' },
+      { name: 'In Transit', value: activeCount, color: '#0ea5e9' },
+      { name: 'Delayed', value: delayedCount, color: '#ef4444' },
     ];
 
-    // Top operational routes (by cargo weight)
-    const topRoutes = await db
+    // Top operational routes (by cargo weight) with airline info
+    const topRoutesRaw = await db
       .select({
         originCode: airports.iataCode,
         originName: airports.name,
         destCode: sql<string>`dest_airport.iata_code`,
         destName: sql<string>`dest_airport.name`,
-        flightId: flights.flightId,
+        airlineCode: airlines.airlineCode,
+        flightNumber: airplanes.flightNumber,
         totalWeight: sql<number>`COALESCE(SUM(CAST(${shipments.weightKg} AS NUMERIC)), 0)`,
         shipmentCount: count(),
       })
       .from(shipments)
       .innerJoin(flights, eq(shipments.flightId, flights.id))
+      .leftJoin(airlines, eq(flights.airlineId, airlines.airlineId))
+      .leftJoin(airplanes, eq(flights.airplaneId, airplanes.airplaneId))
       .innerJoin(airports, eq(shipments.originAirportId, airports.id))
       .innerJoin(sql`airports AS dest_airport`, sql`${shipments.destAirportId} = dest_airport.id`)
-      .where(gte(shipments.createdAt, weekAgo))
+      .where(gte(shipments.createdAt, startDate))
       .groupBy(
         airports.iataCode,
         airports.name,
         sql`dest_airport.iata_code`,
         sql`dest_airport.name`,
-        flights.flightId
+        airlines.airlineCode,
+        airplanes.flightNumber
       )
       .orderBy(desc(sql`COALESCE(SUM(CAST(${shipments.weightKg} AS NUMERIC)), 0)`))
       .limit(5);
 
-    // Recent cargo flights with status
+    // Recent cargo flights with status including airline and airplane info
     const cargoFlights = await db.query.shipments.findMany({
       with: {
         originAirport: true,
         destAirport: true,
-        flight: true,
+        flight: {
+          with: {
+            airline: true,
+            airplane: true,
+          },
+        },
       },
       orderBy: [desc(shipments.createdAt)],
       limit: 6,
@@ -123,11 +170,11 @@ export async function GET(request: NextRequest) {
         },
         capacityData,
         slaData,
-        topRoutes: topRoutes.map((r, idx) => ({
+        topRoutes: topRoutesRaw.map((r, idx) => ({
           id: `A${idx + 1}`,
           sector: `${r.originCode} → ${r.destCode}`,
           desc: `${r.originName} to ${r.destName}`,
-          flightId: r.flightId,
+          flightId: r.flightNumber || r.airlineCode || 'N/A',
           weight: `${(Number(r.totalWeight) / 1000).toFixed(1)} MT`,
           shipmentCount: r.shipmentCount,
         })),
@@ -135,7 +182,7 @@ export async function GET(request: NextRequest) {
           awb: f.awbNumber,
           origin: f.originAirport?.iataCode || 'N/A',
           dest: f.destAirport?.iataCode || 'N/A',
-          flight: f.flight?.flightId || 'N/A',
+          flight: f.flight?.airplane?.flightNumber || 'N/A',
           status: f.status,
           weight: `${Number(f.weightKg).toFixed(0)} kg`,
           timestamp: f.createdAt.toISOString(),
