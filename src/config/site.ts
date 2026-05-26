@@ -1,0 +1,27 @@
+
+export const siteConfig = {
+  name: 'SkyLedger',
+  title: 'SkyLedger - Precision Cargo Orchestration & Air Freight Management',
+  description: 'Transform your global logistics with SkyLedger\'s advanced digital ledger system. Track air cargo shipments in real-time, manage flight manifests, and optimize your supply chain with architectural precision.',
+  url: 'https://skyledger.com',
+  ogImage: '/og-image.png',
+  keywords: [
+    'air cargo tracking',
+    'freight management',
+    'logistics software',
+    'shipment tracking',
+    'cargo management system',
+    'air freight logistics',
+    'supply chain management',
+    'cargo orchestration',
+    'flight manifest management',
+    'real-time tracking',
+    'logistics platform',
+    'cargo ledger',
+  ],
+  author: 'SkyLedger Logistics Corp.',
+  creator: 'SkyLedger Team',
+  publisher: 'SkyLedger Logistics Corp.',
+  locale: 'en_US',
+  type: 'website',
+};

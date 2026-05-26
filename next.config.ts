@@ -24,20 +24,11 @@ const nextConfig: NextConfig = {
   // Disable source maps in development for faster builds
   productionBrowserSourceMaps: false,
 
-  // Vercel-specific optimizations for middleware
+  // Experimental features for Vercel deployment
   experimental: {
-    optimizePackageImports: ["@radix-ui"],
-  },
-
-  // Ensure middleware builds correctly
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      config.optimization = {
-        ...config.optimization,
-        minimize: true,
-      };
-    }
-    return config;
+    serverActions: {
+      bodySizeLimit: '2mb',
+    },
   },
 };
 

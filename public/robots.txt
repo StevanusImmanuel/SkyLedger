@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /shipments
+Disallow: /reports
+Disallow: /unauthorized
+
+Sitemap: https://skyledger.com/sitemap.xml
