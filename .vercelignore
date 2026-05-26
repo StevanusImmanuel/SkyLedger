@@ -1,0 +1,24 @@
+# Vercel ignore file
+# Ignore development and test files
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+__tests__
+.env.local
+.env.development.local
+
+# Ignore documentation files
+*.md
+!README.md
+
+# Ignore SQL and development files
+*.sql
+CRUDDB.md
+DATABASE_SCHEMA.md
+IMPLEMENTATION_SUMMARY.md
+TASK_COMPLETION_SUMMARY.md
+crud_queries.sql
+dummy_data.sql
+seed_data.sql
+run-migration.js

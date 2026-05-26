@@ -3,9 +3,6 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
 
-  // Empty turbopack config to silence webpack warning
-  turbopack: {},
-
   // Enable styled-components compiler to fix hydration issues
   compiler: {
     styledComponents: true,
@@ -29,11 +26,6 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '2mb',
     },
-  },
-
-  // Disable file tracing for middleware to fix Vercel deployment
-  outputFileTracingIncludes: {
-    '/': ['./middleware.ts'],
   },
 };
 
