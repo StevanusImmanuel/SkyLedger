@@ -6,6 +6,11 @@ const nextConfig: NextConfig = {
   // Empty turbopack config to silence webpack warning
   turbopack: {},
 
+  // Enable styled-components compiler to fix hydration issues
+  compiler: {
+    styledComponents: true,
+  },
+
   // Optimize images
   images: {
     remotePatterns: [

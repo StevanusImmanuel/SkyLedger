@@ -5,8 +5,8 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Public routes that don't require authentication
-  const publicRoutes = ['/login', '/login/auth', '/login/register', '/login/forgot-password', '/login/reset-password'];
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+  const publicRoutes = ['/', '/tracking', '/pricing', '/login', '/login/auth', '/login/register', '/login/forgot-password', '/login/reset-password'];
+  const isPublicRoute = publicRoutes.some(route => pathname === route || pathname.startsWith(route));
 
   // Check for session token
   const token = request.cookies.get('terminal_session')?.value;
