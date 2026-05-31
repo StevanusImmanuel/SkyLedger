@@ -1,4 +1,4 @@
-import { pgTable, serial, char, varchar } from 'drizzle-orm/pg-core';
+import { pgTable, serial, char, varchar, numeric } from 'drizzle-orm/pg-core';
 
 export const airports = pgTable('airports', {
   id: serial('id').primaryKey(),
@@ -7,4 +7,6 @@ export const airports = pgTable('airports', {
   city: varchar('city', { length: 100 }),
   country: varchar('country', { length: 100 }),
   timezone: varchar('timezone', { length: 50 }),
+  latitude: numeric('latitude', { precision: 9, scale: 6 }),
+  longitude: numeric('longitude', { precision: 9, scale: 6 }),
 });

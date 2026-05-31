@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -28,6 +29,7 @@ type DashboardData = {
     shipmentCount: number;
   }>;
   cargoFlights: Array<{
+    id: string;
     awb: string;
     origin: string;
     dest: string;
@@ -380,7 +382,7 @@ function DashboardContent() {
               </tr>
             </thead>
             <tbody>
-              {(data?.cargoFlights || []).map((flight, i) => {
+              {(data?.cargoFlights || []).map((flight) => {
                 const statusKey = flight.status.toLowerCase();
                 const statusClass = statusClassMap[statusKey] || 'sl-badge-manifested';
                 const indicatorColor = statusIndicatorColor[statusKey] || '#8b5cf6';
@@ -388,11 +390,13 @@ function DashboardContent() {
                 const destColor = airportColorMap[flight.dest] || 'green';
 
                 return (
-                  <tr key={i}>
+                  <tr key={flight.id}>
                     <td style={{ paddingLeft: 20 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <div className="sl-cargo-row-indicator" style={{ background: indicatorColor }} />
-                        <span style={{ fontWeight: 700, fontSize: 12, color: '#1a2d5a' }}>{flight.awb}</span>
+                        <Link href={`/shipments/${flight.id}`} className="sl-awb-number">
+                          {flight.awb}
+                        </Link>
                       </div>
                     </td>
                     <td>

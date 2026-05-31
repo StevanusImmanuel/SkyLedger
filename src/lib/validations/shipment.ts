@@ -8,7 +8,7 @@ export const createShipmentSchema = z.object({
   priority: z.enum(['standard', 'express', 'critical']).default('standard'),
   productType: z.string().min(1).max(100),
   quantity: z.number().int().positive(),
-  weightKg: z.number().positive(),
+  weightKg: z.number().nonnegative(),
   notes: z.string().max(500).optional(),
   estimatedDelivery: z.string().datetime().optional(),
 });

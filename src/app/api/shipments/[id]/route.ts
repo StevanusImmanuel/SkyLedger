@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { shipments, shipmentEvents, airports, flights, airlines, airplanes } from '@/lib/db/schema';
+import { shipments, shipmentEvents, airports, flights } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
-import { updateShipmentSchema } from '@/lib/validations/shipment';
+import {
+  calculateShippingFee,
+  formatShippingFee,
+  isShipmentPriority,
+} from '@/lib/shipments/shipping-fee';
 import { eq, and } from 'drizzle-orm';
 
 async function getAuthUser(req: NextRequest) {
@@ -13,14 +17,58 @@ async function getAuthUser(req: NextRequest) {
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const NOTE_LABELS = [
+  'Shipping Date',
+  'Sender',
+  'Receiver',
+  'Tel',
+  'Origin',
+  'Dest',
+  'Delivery',
+  'Fee',
+  'Weight Unit',
+  'Notes',
+];
+
+function setNoteValue(notes: string | null, label: string, value: unknown) {
+  const nextValue = String(value ?? '').trim();
+  const currentNotes = notes || '';
+
+  if (!nextValue) return currentNotes;
+
+  const stopLabels = NOTE_LABELS.filter((item) => item !== label).join('|');
+  const labelPattern = new RegExp(`(?:^|,\\s*)${label}:\\s*[\\s\\S]*?(?=,\\s*(?:${stopLabels}):|$)`, 'i');
+  const replacement = `${label}: ${nextValue}`;
+
+  if (labelPattern.test(currentNotes)) {
+    return currentNotes.replace(labelPattern, (match) => {
+      const prefix = match.startsWith(',') ? ', ' : '';
+      return `${prefix}${replacement}`;
+    });
+  }
+
+  return currentNotes ? `${currentNotes}, ${replacement}` : replacement;
+}
+
 export async function GET(request: NextRequest, context: RouteContext) {
   const user = await getAuthUser(request);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await context.params;
+  const shipmentIdentifier = (() => {
+    try {
+      return decodeURIComponent(id);
+    } catch {
+      return id;
+    }
+  })();
+  const shipmentWhere = UUID_PATTERN.test(id)
+    ? eq(shipments.id, id)
+    : eq(shipments.awbNumber, shipmentIdentifier);
 
   const shipment = await db.query.shipments.findFirst({
-    where: eq(shipments.id, id),
+    where: shipmentWhere,
     with: {
       originAirport: true,
       destAirport: true,
@@ -58,10 +106,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const {
       deliveryStatus,
       productType,
-      airlineId,
       airplaneId,
-      shippingDate,
       productWeight,
+      priority,
       originAddress,
       destinationAddress,
       originIata,
@@ -72,7 +119,36 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       telpNumber,
     } = body;
 
+    const existingShipment = await db.query.shipments.findFirst({
+      where: eq(shipments.id, id),
+      columns: {
+        priority: true,
+        weightKg: true,
+        notes: true,
+      },
+    });
+
+    if (!existingShipment) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
+    const nextPriority = priority ?? existingShipment.priority;
+
+    if (!isShipmentPriority(nextPriority)) {
+      return NextResponse.json({ error: 'Invalid priority level' }, { status: 400 });
+    }
+
+    if (priority !== undefined) {
+      updateData.priority = nextPriority;
+    }
+
+    const productWeightProvided = productWeight !== undefined && productWeight !== '';
+    const nextProductWeight = productWeightProvided
+      ? Number(productWeight)
+      : Number(existingShipment.weightKg || 0);
+
+    if (!Number.isFinite(nextProductWeight) || nextProductWeight < 0) {
+      return NextResponse.json({ error: 'Product weight must be a non-negative number' }, { status: 400 });
+    }
 
     // Map delivery status to shipment status and delivery_status enum
     if (deliveryStatus) {
@@ -109,8 +185,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     // Update weight
-    if (productWeight) {
-      updateData.weightKg = String(productWeight);
+    if (productWeightProvided) {
+      updateData.weightKg = String(nextProductWeight);
     }
 
     // Update airports if IATA codes provided
@@ -139,18 +215,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       if (availableFlight) updateData.flightId = availableFlight.id;
     }
 
-    // Update notes with additional info
-    if (notes || sender || receiver || telpNumber || originAddress || destinationAddress) {
-      const noteParts = [];
-      if (notes) noteParts.push(notes);
-      if (sender) noteParts.push(`Sender: ${sender}`);
-      if (receiver) noteParts.push(`Receiver: ${receiver}`);
-      if (telpNumber) noteParts.push(`Tel: ${telpNumber}`);
-      if (originAddress) noteParts.push(`Origin: ${originAddress}`);
-      if (destinationAddress) noteParts.push(`Dest: ${destinationAddress}`);
-
-      updateData.notes = noteParts.join(', ');
-    }
+    let updatedNotes = typeof notes === 'string' ? notes : existingShipment.notes || '';
+    updatedNotes = setNoteValue(updatedNotes, 'Sender', sender);
+    updatedNotes = setNoteValue(updatedNotes, 'Receiver', receiver);
+    updatedNotes = setNoteValue(updatedNotes, 'Tel', telpNumber);
+    updatedNotes = setNoteValue(updatedNotes, 'Origin', originAddress);
+    updatedNotes = setNoteValue(updatedNotes, 'Dest', destinationAddress);
+    updatedNotes = setNoteValue(
+      updatedNotes,
+      'Fee',
+      formatShippingFee(calculateShippingFee(nextProductWeight, nextPriority))
+    );
+    updateData.notes = updatedNotes;
 
     await db
       .update(shipments)
@@ -159,9 +235,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     // Create event if status changed
     if (deliveryStatus) {
+      type ShipmentEventInsert = typeof shipmentEvents.$inferInsert;
+
       await db.insert(shipmentEvents).values({
         shipmentId: id,
-        status: updateData.status as any,
+        status: updateData.status as ShipmentEventInsert['status'],
         location: destinationAddress || originAddress,
         notes: `Status updated to: ${deliveryStatus}`,
         changedBy: user.id,

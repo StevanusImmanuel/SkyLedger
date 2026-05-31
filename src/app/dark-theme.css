@@ -22,6 +22,10 @@ html[data-theme="dark"] .sl-sidebar {
   border-right-color: #3b5a99;
 }
 
+html[data-theme="dark"] .sl-sidebar-expanded-blur {
+  background: rgba(2, 6, 23, 0.32);
+}
+
 html[data-theme="dark"] .sl-topbar {
   background: #1a2d5a;
   border-bottom-color: #3b5a99;

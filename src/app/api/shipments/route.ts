@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { shipments, shipmentEvents, airports, flights, airlines, airplanes } from '@/lib/db/schema';
+import { shipments, shipmentEvents, airports, flights, airlines } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
-import { createShipmentSchema } from '@/lib/validations/shipment';
-import { eq, desc, and, sql, or, ilike, count, gte, lte, SQL } from 'drizzle-orm';
+import {
+  calculateShippingFeeFromInput,
+  formatShippingFee,
+  isShipmentPriority,
+} from '@/lib/shipments/shipping-fee';
+import { eq, desc, and, or, ilike, count, gte, lte, SQL } from 'drizzle-orm';
 
 async function getAuthUser(req: NextRequest) {
   const token = req.cookies.get('terminal_session')?.value;
@@ -16,6 +20,43 @@ function generateAwbNumber(airlineCode: string): string {
   return `${airlineCode}-${randomNum}`;
 }
 
+function buildShipmentNotes({
+  sender,
+  receiver,
+  telpNumber,
+  originAddress,
+  destinationAddress,
+  deliveryType,
+  shippingFee,
+  weightUnit,
+  shippingDate,
+  notes,
+}: {
+  sender?: string;
+  receiver?: string;
+  telpNumber?: string;
+  originAddress?: string;
+  destinationAddress?: string;
+  deliveryType?: string;
+  shippingFee?: string;
+  weightUnit?: string;
+  shippingDate?: string;
+  notes?: string;
+}) {
+  return [
+    shippingDate && `Shipping Date: ${shippingDate}`,
+    sender && `Sender: ${sender}`,
+    receiver && `Receiver: ${receiver}`,
+    telpNumber && `Tel: ${telpNumber}`,
+    originAddress && `Origin: ${originAddress}`,
+    destinationAddress && `Dest: ${destinationAddress}`,
+    deliveryType && `Delivery: ${deliveryType}`,
+    shippingFee && `Fee: ${shippingFee}`,
+    weightUnit && `Weight Unit: ${weightUnit}`,
+    notes && `Notes: ${notes}`,
+  ].filter(Boolean).join(', ');
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request);
@@ -23,6 +64,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = request.nextUrl;
     const statusFilter = searchParams.get('status') as typeof shipments.$inferSelect.status | null;
+    const deliveryStatusFilter = searchParams.get('deliveryStatus') as typeof shipments.$inferSelect.deliveryStatus | null;
     const search = searchParams.get('search') || '';
     const airport = searchParams.get('airport') || '';
     const dateFrom = searchParams.get('dateFrom') || '';
@@ -34,6 +76,10 @@ export async function GET(request: NextRequest) {
 
     if (statusFilter) {
       conditions.push(eq(shipments.status, statusFilter));
+    }
+
+    if (deliveryStatusFilter) {
+      conditions.push(eq(shipments.deliveryStatus, deliveryStatusFilter));
     }
 
     // Search by AWB, Sender, Receiver (from notes field)
@@ -124,10 +170,20 @@ export async function POST(request: NextRequest) {
       productWeight,
       weightUnit,
       deliveryType,
-      shippingFee,
       deliveryStatus,
       notes,
     } = body;
+    const priority = body.priority || 'standard';
+    const productWeightValue = Number(productWeight);
+    const shippingFee = calculateShippingFeeFromInput(productWeight, priority);
+
+    if (!isShipmentPriority(priority)) {
+      return NextResponse.json({ error: 'Invalid priority level' }, { status: 400 });
+    }
+
+    if (shippingFee === null) {
+      return NextResponse.json({ error: 'Product weight must be a non-negative number' }, { status: 400 });
+    }
 
     // Get airline code for AWB generation
     const airline = await db.query.airlines.findFirst({
@@ -155,18 +211,27 @@ export async function POST(request: NextRequest) {
     // Generate AWB with airline code
     const awbNumber = generateAwbNumber(airline.airlineCode);
 
-    // Map delivery status to shipment status
-    let shipmentStatus: 'pending' | 'processing' | 'in_transit' | 'delivered' | 'delayed' | 'cancelled' = 'pending';
-    if (deliveryStatus) {
-      if (['Booked', 'Received at Warehouse', 'Security Cleared', 'Manifested'].includes(deliveryStatus)) {
-        shipmentStatus = 'pending';
-      } else if (['Departed', 'Transshipment'].includes(deliveryStatus)) {
-        shipmentStatus = 'in_transit';
-      } else if (['Arrived at Destination Airports', 'Out for Delivery', 'Ready for Pickup'].includes(deliveryStatus)) {
-        shipmentStatus = 'processing';
-      } else if (deliveryStatus === 'Delivered') {
-        shipmentStatus = 'delivered';
-      }
+    type ShipmentStatus = NonNullable<typeof shipments.$inferInsert.status>;
+    type DeliveryStatusEnum = NonNullable<typeof shipments.$inferInsert.deliveryStatus>;
+
+    const deliveryStatusMap: Record<string, { shipmentStatus: ShipmentStatus; deliveryStatusEnum: DeliveryStatusEnum }> = {
+      'Booked': { shipmentStatus: 'pending', deliveryStatusEnum: 'booked' },
+      'Received at Warehouse': { shipmentStatus: 'pending', deliveryStatusEnum: 'received_at_warehouse' },
+      'Security Cleared': { shipmentStatus: 'pending', deliveryStatusEnum: 'security_cleared' },
+      'Manifested': { shipmentStatus: 'pending', deliveryStatusEnum: 'manifested' },
+      'Departed': { shipmentStatus: 'in_transit', deliveryStatusEnum: 'departed' },
+      'Transshipment': { shipmentStatus: 'in_transit', deliveryStatusEnum: 'transshipment' },
+      'Arrived at Destination Airports': { shipmentStatus: 'processing', deliveryStatusEnum: 'arrived_at_destination' },
+      'Out for Delivery': { shipmentStatus: 'processing', deliveryStatusEnum: 'out_for_delivery' },
+      'Ready for Pickup': { shipmentStatus: 'processing', deliveryStatusEnum: 'ready_for_pickup' },
+      'Delivered': { shipmentStatus: 'delivered', deliveryStatusEnum: 'delivered' },
+    };
+
+    let shipmentStatus: ShipmentStatus = 'pending';
+    let deliveryStatusEnum: DeliveryStatusEnum = 'booked';
+    if (deliveryStatus && deliveryStatusMap[deliveryStatus]) {
+      shipmentStatus = deliveryStatusMap[deliveryStatus].shipmentStatus;
+      deliveryStatusEnum = deliveryStatusMap[deliveryStatus].deliveryStatusEnum;
     }
 
     const [newShipment] = await db
@@ -176,12 +241,24 @@ export async function POST(request: NextRequest) {
         flightId: availableFlight?.id,
         originAirportId: originAirport?.id,
         destAirportId: destAirport?.id,
-        priority: body.priority || 'standard',
+        priority,
         productType,
         quantity: 1,
-        weightKg: String(productWeight),
+        weightKg: String(productWeightValue),
         status: shipmentStatus,
-        notes: notes || `Sender: ${sender}, Receiver: ${receiver}, Tel: ${telpNumber}, Origin: ${originAddress}, Dest: ${destinationAddress}, Delivery: ${deliveryType}, Fee: $${shippingFee}, Weight Unit: ${weightUnit}`,
+        deliveryStatus: deliveryStatusEnum,
+        notes: buildShipmentNotes({
+          sender,
+          receiver,
+          telpNumber,
+          originAddress,
+          destinationAddress,
+          deliveryType,
+          shippingFee: formatShippingFee(shippingFee),
+          weightUnit,
+          shippingDate,
+          notes,
+        }),
         createdBy: user.id,
         estimatedDelivery: shippingDate ? new Date(new Date(shippingDate).getTime() + 3 * 24 * 60 * 60 * 1000) : undefined,
       })

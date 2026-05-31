@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { shipments, flights, airports, airlines, airplanes } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
-import { sql, eq, and, gte, desc, count } from 'drizzle-orm';
+import { sql, eq, gte, desc, count } from 'drizzle-orm';
 
 async function getAuthUser(req: NextRequest) {
   const token = req.cookies.get('terminal_session')?.value;
@@ -22,21 +22,17 @@ export async function GET(request: NextRequest) {
     // Calculate date range based on duration
     const now = new Date();
     let startDate: Date;
-    let daysCount: number;
 
     switch (duration) {
       case 'month':
         startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        daysCount = 30;
         break;
       case 'year':
         startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-        daysCount = 12; // Show 12 months
         break;
       case 'week':
       default:
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        daysCount = 7;
         break;
     }
 
@@ -179,6 +175,7 @@ export async function GET(request: NextRequest) {
           shipmentCount: r.shipmentCount,
         })),
         cargoFlights: cargoFlights.map(f => ({
+          id: f.id,
           awb: f.awbNumber,
           origin: f.originAirport?.iataCode || 'N/A',
           dest: f.destAirport?.iataCode || 'N/A',

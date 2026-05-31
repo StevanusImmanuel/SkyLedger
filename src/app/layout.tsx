@@ -1,5 +1,6 @@
 import "./globals.css";
 import "./dark-theme.css";
+import "leaflet/dist/leaflet.css";
 import { Inter } from "next/font/google";
 import { NotificationProvider } from "@/components/ui/notification-provider";
 import { StructuredData } from "@/components/seo/structured-data";
