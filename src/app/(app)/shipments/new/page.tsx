@@ -1,21 +1,23 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBarcode,
   faInfoCircle,
-  faPlaneDeparture,
   faGlobe,
   faBoxesStacked,
   faChevronDown,
-  faShieldHalved,
   faUser,
   faPhone,
   faMapMarkerAlt,
 } from "@fortawesome/free-solid-svg-icons";
 import { useNotifications } from "@/components/ui/notification-provider";
+import {
+  calculateShippingFeeFromInput,
+  formatShippingFee,
+} from "@/lib/shipments/shipping-fee";
 
 type Airline = {
   airlineId: number;
@@ -104,6 +106,11 @@ export default function NewShipmentPage() {
     priority: "standard",
     notes: "",
   });
+  const shippingFeeAmount = useMemo(
+    () => calculateShippingFeeFromInput(formData.productWeight, formData.priority),
+    [formData.productWeight, formData.priority]
+  );
+  const shippingFeeDisplay = shippingFeeAmount === null ? "" : formatShippingFee(shippingFeeAmount);
 
   // Fetch airlines on mount
   useEffect(() => {
@@ -164,6 +171,16 @@ export default function NewShipmentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (shippingFeeAmount === null) {
+      addNotification({
+        variant: 'destructive',
+        title: 'Invalid shipment weight',
+        description: 'Product weight must be a non-negative number and priority must be valid.',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -174,6 +191,7 @@ export default function NewShipmentPage() {
           airlineId: selectedAirline,
           airplaneId: selectedAirplane,
           ...formData,
+          shippingFee: shippingFeeDisplay,
         }),
       });
 
@@ -489,6 +507,7 @@ export default function NewShipmentPage() {
               <input
                 type="number"
                 step="0.001"
+                min="0"
                 placeholder="0.000"
                 className={standardInput}
                 value={formData.productWeight}
@@ -539,12 +558,11 @@ export default function NewShipmentPage() {
             <div className="space-y-2">
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Shipping Fee (USD)</label>
               <input
-                type="number"
-                step="0.01"
-                placeholder="0.00"
+                type="text"
+                placeholder="$0.00"
                 className={standardInput}
-                value={formData.shippingFee}
-                onChange={(e) => handleInputChange('shippingFee', e.target.value)}
+                value={shippingFeeDisplay}
+                readOnly
                 required
               />
             </div>

@@ -13,13 +13,15 @@ import {
   UserCircle,
   Bell,
   HelpCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Users,
 } from "lucide-react";
 import Image from "next/image";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,7 +29,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
 import { useNotifications } from "@/components/ui/notification-provider";
 
 const sidebarVariants = {
@@ -109,6 +110,13 @@ export function SessionNavBar() {
     fetchUser();
   }, []);
 
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      '--sl-sidebar-width',
+      isCollapsed ? '3.5rem' : '15rem'
+    );
+  }, [isCollapsed]);
+
   const handleLogout = async () => {
     try {
       await fetch('/api/auth?action=logout', { method: 'POST' });
@@ -146,15 +154,18 @@ export function SessionNavBar() {
 
   return (
     <>
-      {/* Backdrop Blur Overlay */}
-      <motion.div
-        className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isCollapsed ? 0 : 1 }}
-        transition={{ duration: 0.2 }}
-        style={{ pointerEvents: isCollapsed ? 'none' : 'auto' }}
-        onClick={() => setIsCollapsed(true)}
-      />
+      <AnimatePresence>
+        {!isCollapsed && (
+          <motion.div
+            aria-hidden="true"
+            className="sl-sidebar-expanded-blur"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={transitionProps}
+          />
+        )}
+      </AnimatePresence>
 
       <motion.div
         className={cn(
@@ -164,8 +175,6 @@ export function SessionNavBar() {
         animate={isCollapsed ? "closed" : "open"}
         variants={sidebarVariants}
         transition={transitionProps}
-        onMouseEnter={() => setIsCollapsed(false)}
-        onMouseLeave={() => setIsCollapsed(true)}
       >
       <motion.div
         className={`relative z-40 flex h-full shrink-0 flex-col bg-white transition-all`}
@@ -262,12 +271,48 @@ export function SessionNavBar() {
                         Settings
                       </motion.span>
                     </Link>
+                    {user?.role === 'admin' && (
+                      <Link
+                        href="/account-management"
+                        className={cn(
+                          "relative flex h-8 w-full flex-row items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium text-[#64748b] transition-all hover:bg-[#f1f5f9] hover:text-[#1e293b]",
+                          pathname?.includes("account-management") &&
+                            "bg-[#f0f4ff] font-semibold text-[#1a2d5a]",
+                        )}
+                      >
+                        {pathname?.includes("account-management") && (
+                          <div className="absolute bottom-0 left-0 top-0 w-[3px] rounded-r-sm bg-[#1a2d5a]" />
+                        )}
+                        <Users className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                        <motion.span variants={variants}>
+                          Manajemen Akun
+                        </motion.span>
+                      </Link>
+                    )}
                   </div>
                 </ScrollArea>
               </div>
 
               {/* Bottom Section */}
               <div className="flex flex-col border-t border-[#f0f4f8] py-2">
+                {/* Collapse Toggle */}
+                <button
+                  type="button"
+                  aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  onClick={() => setIsCollapsed((value) => !value)}
+                  className="flex h-8 w-full flex-row items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-[#64748b] transition-all hover:bg-[#f1f5f9] hover:text-[#1e293b]"
+                >
+                  {isCollapsed ? (
+                    <PanelLeftOpen className="h-4 w-4 shrink-0" strokeWidth={2} />
+                  ) : (
+                    <PanelLeftClose className="h-4 w-4 shrink-0" strokeWidth={2} />
+                  )}
+                  <motion.span variants={variants}>
+                    {isCollapsed ? "Expand" : "Collapse"}
+                  </motion.span>
+                </button>
+
                 {/* Help Button */}
                 <button
                   className="flex h-8 w-full flex-row items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-[#94a3b8] transition-all hover:bg-[#f1f5f9] hover:text-[#1e293b]"
@@ -423,7 +468,7 @@ export function SessionNavBar() {
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <Bell className="mb-2 h-8 w-8 text-[#cbd5e1]" strokeWidth={1.5} />
                     <p className="text-sm font-medium text-[#94a3b8]">No notifications</p>
-                    <p className="text-xs text-[#cbd5e1]">You're all caught up!</p>
+                    <p className="text-xs text-[#cbd5e1]">You&apos;re all caught up!</p>
                   </div>
                 ) : (
                   <div className="space-y-2">

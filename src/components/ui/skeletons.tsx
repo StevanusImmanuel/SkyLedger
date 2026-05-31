@@ -1,5 +1,7 @@
 'use client';
 
+const chartSkeletonHeights = [48, 72, 60, 42, 77, 58, 88];
+
 export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="sl-awb-table-container">
@@ -50,13 +52,15 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
 
 export function ShipmentTableSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="sl-awb-table-container">
-      <table className="sl-table">
+    <div className="sl-awb-table-container" style={{ overflowX: 'auto' }}>
+      <table className="sl-table" style={{ minWidth: 980 }}>
         <thead>
           <tr>
             <th style={{ paddingLeft: 20 }}>AWB Number</th>
+            <th>Sender Name</th>
+            <th>Receiver Name</th>
             <th>Destination</th>
-            <th>Flight ID</th>
+            <th>Product Type</th>
             <th>Priority</th>
             <th>Status</th>
             <th>Actions</th>
@@ -71,6 +75,8 @@ export function ShipmentTableSkeleton({ rows = 6 }: { rows?: number }) {
                   <div className="skeleton" style={{ width: 100, height: 14, borderRadius: 4 }} />
                 </div>
               </td>
+              <td><div className="skeleton" style={{ width: 100, height: 14, borderRadius: 4 }} /></td>
+              <td><div className="skeleton" style={{ width: 110, height: 14, borderRadius: 4 }} /></td>
               <td>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <div className="skeleton" style={{ width: 40, height: 20, borderRadius: 4 }} />
@@ -111,13 +117,13 @@ export function ChartSkeleton() {
         </div>
       </div>
       <div style={{ height: 220, display: 'flex', alignItems: 'flex-end', gap: 8, padding: '20px 10px' }}>
-        {Array.from({ length: 7 }).map((_, i) => (
+        {chartSkeletonHeights.map((height, i) => (
           <div
             key={i}
             className="skeleton"
             style={{
               flex: 1,
-              height: `${Math.random() * 60 + 40}%`,
+              height: `${height}%`,
               borderRadius: 4,
             }}
           />

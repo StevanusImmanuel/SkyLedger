@@ -6,7 +6,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="sl-app" suppressHydrationWarning>
       <ClientSidebar />
-      <div className="sl-main" style={{ marginLeft: '3.5rem' }} suppressHydrationWarning>
+      <div
+        className="sl-main"
+        style={{
+          marginLeft: 'var(--sl-sidebar-width, 3.5rem)',
+          transition: 'margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+        suppressHydrationWarning
+      >
         <main className="sl-content" suppressHydrationWarning>
           <PageTransition>
             {children}

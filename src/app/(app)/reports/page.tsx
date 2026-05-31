@@ -1,13 +1,10 @@
 'use client';
 import { useState, useEffect, Suspense } from 'react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell,
-} from 'recharts';
+import Link from 'next/link';
 import { usePagination } from '@/lib/hooks/usePagination';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 import { Pagination } from '@/components/ui/Pagination';
-import { TableSkeleton, StatCardSkeleton, ChartSkeleton, PieChartSkeleton } from '@/components/ui/skeletons';
+import { TableSkeleton, StatCardSkeleton } from '@/components/ui/skeletons';
 import { exportToCSV, exportToPDF } from '@/lib/utils/export';
 
 type Shipment = {
@@ -15,7 +12,7 @@ type Shipment = {
   awbNumber: string;
   originAirport: { iataCode: string; name: string; city: string; country: string } | null;
   destAirport: { iataCode: string; name: string; city: string; country: string } | null;
-  flight: { flightId: string } | null;
+  flight: { airplane: { airplaneId: number } | null } | null;
   priority: 'standard' | 'express' | 'critical';
   status: 'pending' | 'processing' | 'in_transit' | 'delivered' | 'delayed' | 'cancelled';
   deliveryStatus: 'booked' | 'received_at_warehouse' | 'security_cleared' | 'manifested' | 'departed' | 'transshipment' | 'arrived_at_destination' | 'out_for_delivery' | 'ready_for_pickup' | 'delivered' | null;
@@ -69,13 +66,14 @@ const airportColorMap: Record<string, string> = {
   HKG: 'blue', LAX: 'purple',
 };
 
+const REPORT_DELIVERY_STATUS: NonNullable<Shipment['deliveryStatus']> = 'delivered';
+
 function ReportsContent() {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [airports, setAirports] = useState<Array<{ id: number; iataCode: string; name: string }>>([]);
   const [selectedAirport, setSelectedAirport] = useState<string>('all');
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [stats, setStats] = useState({
@@ -111,7 +109,7 @@ function ReportsContent() {
         const params = new URLSearchParams();
         if (debouncedSearch) params.set('search', debouncedSearch);
         if (selectedAirport !== 'all') params.set('airport', selectedAirport);
-        if (selectedStatus !== 'all') params.set('status', selectedStatus);
+        params.set('deliveryStatus', REPORT_DELIVERY_STATUS);
         if (dateFrom) params.set('dateFrom', dateFrom);
         if (dateTo) params.set('dateTo', dateTo);
         params.set('limit', '1000'); // Get all for reports
@@ -123,16 +121,8 @@ function ReportsContent() {
 
           // Calculate stats
           const total = json.data.length;
-
-          // In-Flight: departed or transshipment
-          const inFlight = json.data.filter((s: Shipment) =>
-            s.deliveryStatus && ['departed', 'transshipment'].includes(s.deliveryStatus)
-          ).length;
-
-          // Arrived: arrived_at_destination, out_for_delivery, ready_for_pickup, delivered
-          const arrived = json.data.filter((s: Shipment) =>
-            s.deliveryStatus && ['arrived_at_destination', 'out_for_delivery', 'ready_for_pickup', 'delivered'].includes(s.deliveryStatus)
-          ).length;
+          const inFlight = 0;
+          const arrived = json.data.filter((s: Shipment) => s.deliveryStatus === REPORT_DELIVERY_STATUS).length;
 
           const totalWeight = json.data.reduce((sum: number, s: Shipment) => sum + Number(s.weightKg), 0);
 
@@ -145,7 +135,7 @@ function ReportsContent() {
       }
     }
     fetchShipments();
-  }, [debouncedSearch, selectedAirport, selectedStatus, dateFrom, dateTo]);
+  }, [debouncedSearch, selectedAirport, dateFrom, dateTo]);
 
   const paginatedShipments = getPaginatedData(shipments);
   const totalPages = getTotalPages(shipments.length);
@@ -272,16 +262,12 @@ function ReportsContent() {
           <span className="sl-filter-label">Status</span>
           <select
             className="sl-filter-sel"
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
+            value={REPORT_DELIVERY_STATUS}
+            disabled
+            aria-label="Report delivery status filter locked to delivered"
+            style={{ opacity: 0.75, cursor: 'not-allowed' }}
           >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="processing">Processing</option>
-            <option value="in_transit">In Transit</option>
             <option value="delivered">Delivered</option>
-            <option value="delayed">Delayed</option>
-            <option value="cancelled">Cancelled</option>
           </select>
         </div>
         <div className="sl-report-export-btns">
@@ -292,8 +278,9 @@ function ReportsContent() {
                 AWB: s.awbNumber,
                 Origin: `${s.originAirport?.iataCode} - ${s.originAirport?.city}`,
                 Destination: `${s.destAirport?.iataCode} - ${s.destAirport?.city}`,
+                AirplaneID: s.flight?.airplane?.airplaneId || 'N/A',
                 ProductType: s.productType || 'N/A',
-                Status: s.status.toUpperCase(),
+                DeliveryStatus: s.deliveryStatus?.toUpperCase() || 'N/A',
                 Weight: `${s.weightKg} kg`,
                 CreatedAt: new Date(s.createdAt).toLocaleString(),
               }));
@@ -310,8 +297,9 @@ function ReportsContent() {
                 AWB: s.awbNumber,
                 Origin: `${s.originAirport?.iataCode} - ${s.originAirport?.city}`,
                 Destination: `${s.destAirport?.iataCode} - ${s.destAirport?.city}`,
+                AirplaneID: s.flight?.airplane?.airplaneId || 'N/A',
                 ProductType: s.productType || 'N/A',
-                Status: s.status.toUpperCase(),
+                DeliveryStatus: s.deliveryStatus?.toUpperCase() || 'N/A',
                 Weight: `${s.weightKg} kg`,
                 CreatedAt: new Date(s.createdAt).toLocaleString(),
               }));
@@ -342,7 +330,13 @@ function ReportsContent() {
               </tr>
             </thead>
             <tbody>
-              {paginatedShipments.map((s) => {
+              {paginatedShipments.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '28px 20px', textAlign: 'center', color: '#64748b', fontSize: 13, fontWeight: 600 }}>
+                    No delivered shipments found.
+                  </td>
+                </tr>
+              ) : paginatedShipments.map((s) => {
                 const statusKey = s.deliveryStatus || s.status;
                 const statusClass = statusClassMap[statusKey] || 'sl-badge-manifested';
                 const indicatorColor = statusIndicatorMap[statusKey] || '#8b5cf6';
@@ -354,16 +348,14 @@ function ReportsContent() {
                   ? s.deliveryStatus.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
                   : s.status.replace('_', '-').toUpperCase();
 
-                // Extract sender from notes
-                const senderMatch = s.notes?.match(/Sender:\s*([^,]+)/);
-                const sender = senderMatch ? senderMatch[1] : 'N/A';
-
                 return (
                   <tr key={s.id}>
                     <td style={{ paddingLeft: 20 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <div style={{ width: 3, height: 34, borderRadius: 2, background: indicatorColor, flexShrink: 0 }} />
-                        <a href={`/shipments/${s.id}`} className="sl-awb-number">{s.awbNumber}</a>
+                        <Link href={`/shipments/${s.id}`} className="sl-awb-number">
+                          {s.awbNumber}
+                        </Link>
                       </div>
                     </td>
                     <td>
@@ -378,7 +370,7 @@ function ReportsContent() {
                         <span style={{ fontSize: 12, color: '#475569' }}>{s.destAirport?.city || 'Unknown'}, {s.destAirport?.country || 'N/A'}</span>
                       </div>
                     </td>
-                    <td><span style={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>{s.flight?.flightId || 'N/A'}</span></td>
+                    <td><span style={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>{s.flight?.airplane?.airplaneId || 'N/A'}</span></td>
                     <td><span className={`sl-status-badge ${statusClass}`}>{displayStatus}</span></td>
                     <td><span style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>{Number(s.weightKg).toFixed(0)} kg</span></td>
                     <td><span style={{ fontSize: 11.5, color: '#64748b' }}>{new Date(s.createdAt).toLocaleString()}</span></td>
@@ -387,14 +379,16 @@ function ReportsContent() {
               })}
             </tbody>
           </table>
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setPage}
-            totalItems={shipments.length}
-            itemsPerPage={itemsPerPage}
-            startIndex={startIndex}
-          />
+          {shipments.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              totalItems={shipments.length}
+              itemsPerPage={itemsPerPage}
+              startIndex={startIndex}
+            />
+          )}
         </div>
       )}
     </div>

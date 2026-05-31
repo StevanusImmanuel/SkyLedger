@@ -1,21 +1,22 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faBarcode,
-  faInfoCircle,
   faPlaneDeparture,
   faGlobe,
   faBoxesStacked,
   faChevronDown,
-  faShieldHalved,
   faUser,
   faPhone,
   faMapMarkerAlt,
 } from "@fortawesome/free-solid-svg-icons";
 import { useNotifications } from "@/components/ui/notification-provider";
+import {
+  calculateShippingFeeFromInput,
+  formatShippingFee,
+} from "@/lib/shipments/shipping-fee";
 
 type Airline = {
   airlineId: number;
@@ -101,6 +102,7 @@ export default function EditShipmentPage() {
   const [formData, setFormData] = useState({
     deliveryStatus: "",
     productType: "",
+    priority: "standard",
     shippingDate: "",
     productWeight: "",
     originAddress: "",
@@ -112,6 +114,11 @@ export default function EditShipmentPage() {
     receiver: "",
     telpNumber: "",
   });
+  const shippingFeeAmount = useMemo(
+    () => calculateShippingFeeFromInput(formData.productWeight, formData.priority),
+    [formData.productWeight, formData.priority]
+  );
+  const shippingFeeDisplay = shippingFeeAmount === null ? "" : formatShippingFee(shippingFeeAmount);
 
   // Fetch shipment data
   useEffect(() => {
@@ -143,6 +150,7 @@ export default function EditShipmentPage() {
           setFormData({
             deliveryStatus: displayDeliveryStatus,
             productType: shipment.productType || "",
+            priority: shipment.priority || "standard",
             shippingDate: "",
             productWeight: shipment.weightKg,
             originAddress: "",
@@ -222,6 +230,16 @@ export default function EditShipmentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (shippingFeeAmount === null) {
+      addNotification({
+        variant: 'destructive',
+        title: 'Invalid shipment weight',
+        description: 'Product weight must be a non-negative number and priority must be valid.',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -232,6 +250,7 @@ export default function EditShipmentPage() {
           airlineId: selectedAirline,
           airplaneId: selectedAirplane,
           ...formData,
+          shippingFee: shippingFeeDisplay,
         }),
       });
 
@@ -508,6 +527,22 @@ export default function EditShipmentPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Priority Level</label>
+              <div className="relative">
+                <select
+                  className={selectStyle}
+                  value={formData.priority}
+                  onChange={(e) => handleInputChange('priority', e.target.value)}
+                >
+                  <option value="standard">Standard</option>
+                  <option value="express">Express</option>
+                  <option value="critical">Critical</option>
+                </select>
+                <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Product Type</label>
               <div className="relative">
                 <select
@@ -531,10 +566,22 @@ export default function EditShipmentPage() {
               <input
                 type="number"
                 step="0.001"
+                min="0"
                 placeholder="0.000"
                 className={standardInput}
                 value={formData.productWeight}
                 onChange={(e) => handleInputChange('productWeight', e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Shipping Fee (USD)</label>
+              <input
+                type="text"
+                placeholder="$0.00"
+                className={standardInput}
+                value={shippingFeeDisplay}
+                readOnly
               />
             </div>
           </div>
