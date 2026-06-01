@@ -13,6 +13,7 @@ import {
   faMapMarkerAlt,
 } from "@fortawesome/free-solid-svg-icons";
 import { useNotifications } from "@/components/ui/notification-provider";
+import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import {
   calculateShippingFeeFromInput,
   formatShippingFee,
@@ -102,6 +103,7 @@ export default function EditShipmentPage() {
   const [selectedAirplane, setSelectedAirplane] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   
 
   // Form fields (State internal form aplikasi)
@@ -153,21 +155,37 @@ export default function EditShipmentPage() {
             ? deliveryStatusMap[shipment.deliveryStatus] || 'Booked'
             : 'Booked';
 
-          // Perbaikan Poin 3: Mengambil nama kolom database yang sesuai standar (snake_case)
+          // Extract data from notes field
+          const getNoteValue = (label: string) => {
+            if (!shipment.notes) return "";
+            const match = shipment.notes.match(
+              new RegExp(`(?:^|,\\s*)${label}:\\s*([\\s\\S]*?)(?=,\\s*(?:Shipping Date|Sender|Receiver|Tel|Origin|Dest|Delivery|Fee|Weight Unit|Notes):|$)`, 'i')
+            );
+            return match?.[1]?.trim() || "";
+          };
+
+          const shippingDateFromNotes = getNoteValue('Shipping Date');
+          const senderFromNotes = getNoteValue('Sender');
+          const receiverFromNotes = getNoteValue('Receiver');
+          const telpFromNotes = getNoteValue('Tel');
+          const originAddressFromNotes = getNoteValue('Origin');
+          const destAddressFromNotes = getNoteValue('Dest');
+          const shippingFeeFromNotes = getNoteValue('Fee');
+
           setFormData({
             deliveryStatus: displayDeliveryStatus,
             productType: shipment.productType || "",
             priority: shipment.priority || "standard",
-            shippingDate: "",
+            shippingDate: shippingDateFromNotes || "",
             productWeight: shipment.weightKg,
-            originAddress: "",
-            destinationAddress: "",
+            originAddress: originAddressFromNotes || "",
+            destinationAddress: destAddressFromNotes || "",
             originIata: shipment.originAirport?.iataCode || "",
             destIata: shipment.destAirport?.iataCode || "",
-            notes: shipment.notes || "",
-            sender: shipment.sender_name || "",       
-            receiver: shipment.receiver_name || "",    
-            telpNumber: shipment.telp_number || "",   
+            notes: getNoteValue('Notes') || shipment.notes || "",
+            sender: senderFromNotes || "",
+            receiver: receiverFromNotes || "",
+            telpNumber: telpFromNotes || "",
           });
 
           if (shipment.flight?.airline?.airlineId) {
@@ -248,6 +266,11 @@ export default function EditShipmentPage() {
       return;
     }
 
+    // Show confirmation modal instead of submitting directly
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmUpdate = async () => {
     setIsSubmitting(true);
 
     try {
@@ -265,6 +288,7 @@ export default function EditShipmentPage() {
       const data = await res.json();
 
       if (data.success) {
+        setShowConfirmModal(false);
         addNotification({
           variant: 'success',
           title: 'Shipment updated successfully!',
@@ -631,6 +655,19 @@ export default function EditShipmentPage() {
           </button>
         </div>
       </form>
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={handleConfirmUpdate}
+        title="Confirm Shipment Update"
+        description="Are you sure you want to update this shipment? All changes will be saved."
+        confirmText="Update Shipment"
+        cancelText="Review Changes"
+        variant="update"
+        isLoading={isSubmitting}
+      />
     </div>
   );
 }

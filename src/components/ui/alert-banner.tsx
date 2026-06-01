@@ -11,10 +11,10 @@ const alertBannerVariants = cva(
   {
     variants: {
       variant: {
-        default: "border-border bg-background text-foreground",
-        success: "border-green-200/60 bg-background text-foreground dark:border-green-900/60",
-        destructive: "border-red-200/60 bg-background text-foreground dark:border-red-900/60",
-        warning: "border-yellow-200/60 bg-background text-foreground dark:border-yellow-900/60",
+        default: "border-border bg-white text-foreground",
+        success: "border-green-200/60 bg-white text-foreground dark:border-green-900/60",
+        destructive: "border-red-200/60 bg-white text-foreground dark:border-red-900/60",
+        warning: "border-yellow-200/60 bg-white text-foreground dark:border-yellow-900/60",
       },
     },
     defaultVariants: {
@@ -94,8 +94,8 @@ const AlertBanner = React.forwardRef<HTMLDivElement, AlertBannerProps>(
 
         {/* Content & Actions */}
         <div className="flex flex-1 flex-col pr-6">
-          <h3 className="font-semibold text-foreground">{title}</h3>
-          {description && <div className="mt-1 text-sm text-muted-foreground">{description}</div>}
+          <h3 className="font-semibold text-[#1a2d5a]">{title}</h3>
+          {description && <div className="mt-1 text-sm text-[#1a2d5a]">{description}</div>}
 
           {(primaryAction || secondaryAction) && (
             <div className="mt-4 flex items-center gap-4">

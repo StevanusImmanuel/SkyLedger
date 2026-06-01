@@ -12,7 +12,7 @@ type Shipment = {
   awbNumber: string;
   originAirport: { iataCode: string; name: string; city: string; country: string } | null;
   destAirport: { iataCode: string; name: string; city: string; country: string } | null;
-  flight: { airplane: { airplaneId: number } | null } | null;
+  flight: { airplane: { airplaneId: number; flightNumber: string } | null } | null;
   priority: 'standard' | 'express' | 'critical';
   status: 'pending' | 'processing' | 'in_transit' | 'delivered' | 'delayed' | 'cancelled';
   deliveryStatus: 'booked' | 'received_at_warehouse' | 'security_cleared' | 'manifested' | 'departed' | 'transshipment' | 'arrived_at_destination' | 'out_for_delivery' | 'ready_for_pickup' | 'delivered' | null;
@@ -278,7 +278,7 @@ function ReportsContent() {
                 AWB: s.awbNumber,
                 Origin: `${s.originAirport?.iataCode} - ${s.originAirport?.city}`,
                 Destination: `${s.destAirport?.iataCode} - ${s.destAirport?.city}`,
-                AirplaneID: s.flight?.airplane?.airplaneId || 'N/A',
+                PlaneID: s.flight?.airplane?.flightNumber || 'N/A',
                 ProductType: s.productType || 'N/A',
                 DeliveryStatus: s.deliveryStatus?.toUpperCase() || 'N/A',
                 Weight: `${s.weightKg} kg`,
@@ -297,7 +297,7 @@ function ReportsContent() {
                 AWB: s.awbNumber,
                 Origin: `${s.originAirport?.iataCode} - ${s.originAirport?.city}`,
                 Destination: `${s.destAirport?.iataCode} - ${s.destAirport?.city}`,
-                AirplaneID: s.flight?.airplane?.airplaneId || 'N/A',
+                PlaneID: s.flight?.airplane?.flightNumber || 'N/A',
                 ProductType: s.productType || 'N/A',
                 DeliveryStatus: s.deliveryStatus?.toUpperCase() || 'N/A',
                 Weight: `${s.weightKg} kg`,
@@ -323,7 +323,7 @@ function ReportsContent() {
                 <th style={{ paddingLeft: 20 }}>AWB Number</th>
                 <th>Origin</th>
                 <th>Destination</th>
-                <th>Flight ID</th>
+                <th>Plane ID</th>
                 <th>Status</th>
                 <th>Weight</th>
                 <th>Timestamp</th>
@@ -370,7 +370,7 @@ function ReportsContent() {
                         <span style={{ fontSize: 12, color: '#475569' }}>{s.destAirport?.city || 'Unknown'}, {s.destAirport?.country || 'N/A'}</span>
                       </div>
                     </td>
-                    <td><span style={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>{s.flight?.airplane?.airplaneId || 'N/A'}</span></td>
+                    <td><span style={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>{s.flight?.airplane?.flightNumber || 'N/A'}</span></td>
                     <td><span className={`sl-status-badge ${statusClass}`}>{displayStatus}</span></td>
                     <td><span style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>{Number(s.weightKg).toFixed(0)} kg</span></td>
                     <td><span style={{ fontSize: 11.5, color: '#64748b' }}>{new Date(s.createdAt).toLocaleString()}</span></td>

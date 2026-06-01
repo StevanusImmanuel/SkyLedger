@@ -8,6 +8,7 @@ import {
   isShipmentPriority,
 } from '@/lib/shipments/shipping-fee';
 import { eq, and } from 'drizzle-orm';
+import { logActivity } from '@/lib/activity-logger';
 
 async function getAuthUser(req: NextRequest) {
   const token = req.cookies.get('terminal_session')?.value;
@@ -206,12 +207,34 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     // Update flight if airplane changed
     if (airplaneId) {
-      const availableFlight = await db.query.flights.findFirst({
+      let availableFlight = await db.query.flights.findFirst({
         where: and(
           eq(flights.airplaneId, airplaneId),
           eq(flights.status, 'scheduled')
         ),
       });
+
+      // If no scheduled flight exists, create one
+      if (!availableFlight) {
+        const originAirportForFlight = originIata
+          ? await db.query.airports.findFirst({ where: eq(airports.iataCode, originIata) })
+          : null;
+        const destAirportForFlight = destIata
+          ? await db.query.airports.findFirst({ where: eq(airports.iataCode, destIata) })
+          : null;
+
+        const [newFlight] = await db
+          .insert(flights)
+          .values({
+            airplaneId: airplaneId,
+            originAirportId: originAirportForFlight?.id,
+            destAirportId: destAirportForFlight?.id,
+            status: 'scheduled',
+          })
+          .returning();
+        availableFlight = newFlight;
+      }
+
       if (availableFlight) updateData.flightId = availableFlight.id;
     }
 
@@ -246,6 +269,26 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       });
     }
 
+    // Log shipment update activity
+    const shipment = await db.query.shipments.findFirst({
+      where: eq(shipments.id, id),
+      columns: { awbNumber: true },
+    });
+
+    await logActivity({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      action: 'update',
+      entityType: 'shipment',
+      entityId: id,
+      details: {
+        awbNumber: shipment?.awbNumber,
+        updatedFields: Object.keys(body),
+      },
+      request,
+    });
+
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('[PATCH /api/shipments/:id]', err);
@@ -264,8 +307,28 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
 
   try {
+    // Get shipment info before deleting
+    const shipment = await db.query.shipments.findFirst({
+      where: eq(shipments.id, id),
+      columns: { awbNumber: true },
+    });
+
     // Hard delete - cascade will delete related shipment_events
     await db.delete(shipments).where(eq(shipments.id, id));
+
+    // Log shipment deletion activity
+    if (shipment) {
+      await logActivity({
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        action: 'delete',
+        entityType: 'shipment',
+        entityId: id,
+        details: { awbNumber: shipment.awbNumber },
+        request,
+      });
+    }
 
     return NextResponse.json({ success: true, message: 'Shipment deleted successfully' });
   } catch (error) {

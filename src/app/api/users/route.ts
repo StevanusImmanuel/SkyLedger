@@ -6,6 +6,7 @@ import { hashPassword } from '@/lib/auth/password';
 import { registerSchema } from '@/lib/validations/auth';
 import { and, count, eq, ne } from 'drizzle-orm';
 import { z } from 'zod';
+import { logActivity } from '@/lib/activity-logger';
 
 async function getAuthUser(request: NextRequest) {
   const token = request.cookies.get('terminal_session')?.value;
@@ -139,6 +140,22 @@ export async function POST(request: NextRequest) {
       })
       .returning(safeUserColumns());
 
+    // Log user creation activity
+    await logActivity({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      action: 'create',
+      entityType: 'user',
+      entityId: created.id,
+      details: {
+        createdUserName: created.name,
+        createdUserEmail: created.email,
+        createdUserRole: created.role,
+      },
+      request,
+    });
+
     return NextResponse.json({ success: true, data: created }, { status: 201 });
   } catch (error) {
     console.error('[POST /api/users]', error);
@@ -226,6 +243,21 @@ export async function PATCH(request: NextRequest) {
         .where(eq(users.id, targetId))
         .returning(safeUserColumns());
 
+      // Log user update activity
+      await logActivity({
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        action: 'update',
+        entityType: 'user',
+        entityId: targetId,
+        details: {
+          updatedUserName: targetUser.name,
+          updatedFields: Object.keys(updates),
+        },
+        request,
+      });
+
       return NextResponse.json({ success: true, data: updated });
     }
 
@@ -250,16 +282,19 @@ export async function PATCH(request: NextRequest) {
 }
 
 // DELETE /api/users?id=:id — deactivate user (admin only, soft delete)
+// DELETE /api/users?id=:id&permanent=true — permanently delete user (admin only)
 export async function DELETE(request: NextRequest) {
   const user = await getAuthUser(request);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (user.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const targetId = request.nextUrl.searchParams.get('id');
+  const isPermanent = request.nextUrl.searchParams.get('permanent') === 'true';
+
   if (!targetId) return NextResponse.json({ error: 'Missing user id' }, { status: 400 });
 
   if (targetId === user.id) {
-    return NextResponse.json({ error: 'You cannot deactivate your own account' }, { status: 400 });
+    return NextResponse.json({ error: 'You cannot delete your own account' }, { status: 400 });
   }
 
   try {
@@ -278,13 +313,52 @@ export async function DELETE(request: NextRequest) {
       }
     }
 
-    const [updated] = await db
-      .update(users)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(eq(users.id, targetId))
-      .returning(safeUserColumns());
+    if (isPermanent) {
+      // Permanent delete
+      await db.delete(users).where(eq(users.id, targetId));
 
-    return NextResponse.json({ success: true, data: updated, message: 'User deactivated' });
+      // Log user deletion activity
+      await logActivity({
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        action: 'delete',
+        entityType: 'user',
+        entityId: targetId,
+        details: {
+          deletedUserName: targetUser.name,
+          deletedUserEmail: targetUser.email,
+          permanent: true,
+        },
+        request,
+      });
+
+      return NextResponse.json({ success: true, message: 'User permanently deleted' });
+    } else {
+      // Soft delete (deactivate)
+      const [updated] = await db
+        .update(users)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(users.id, targetId))
+        .returning(safeUserColumns());
+
+      // Log user deactivation activity
+      await logActivity({
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        action: 'update',
+        entityType: 'user',
+        entityId: targetId,
+        details: {
+          deactivatedUserName: targetUser.name,
+          action: 'deactivated',
+        },
+        request,
+      });
+
+      return NextResponse.json({ success: true, data: updated, message: 'User deactivated' });
+    }
   } catch (error) {
     console.error('[DELETE /api/users]', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

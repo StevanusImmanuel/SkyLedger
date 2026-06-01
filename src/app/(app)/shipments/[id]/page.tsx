@@ -314,9 +314,9 @@ export default function ShipmentDetailPage() {
             subValue={airline ? airline.airlineCode : undefined}
           />
           <DetailCard
-            label="Airplane ID"
-            value={airplane ? String(airplane.airplaneId) : "N/A"}
-            subValue={airplane ? `${airplane.flightNumber} - ${airplane.model}` : undefined}
+            label="Plane ID"
+            value={airplane ? airplane.flightNumber : "N/A"}
+            subValue={airplane ? `${airplane.model} (Capacity: ${airplane.capacity})` : undefined}
           />
           <DetailCard label="AWB Number" value={shipment.awbNumber} />
           <DetailCard label="Shipping Date" value={details.shippingDate} />

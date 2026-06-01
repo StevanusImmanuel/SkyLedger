@@ -14,6 +14,8 @@ import {
   faMapMarkerAlt,
 } from "@fortawesome/free-solid-svg-icons";
 import { useNotifications } from "@/components/ui/notification-provider";
+import { ConfirmationModal } from "@/components/ui/confirmation-modal";
+import { FormError } from "@/components/ui/form-error";
 import {
   calculateShippingFeeFromInput,
   formatShippingFee,
@@ -54,7 +56,7 @@ const PRODUCT_TYPES = [
   "Special Cargo: Human Remains",
 ];
 
-const WEIGHT_UNITS = ["Kilogram", "Tonnes", "Pcs"];
+const WEIGHT_UNITS = ["Kilogram", "Tonnes"];
 
 const DELIVERY_TYPES = [
   "Airport-to-Airport (A2A)",
@@ -87,6 +89,8 @@ export default function NewShipmentPage() {
   const [awbNumber, setAwbNumber] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [phoneError, setPhoneError] = useState("");
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Form fields
   const [formData, setFormData] = useState({
@@ -108,8 +112,8 @@ export default function NewShipmentPage() {
     notes: "",
   });
   const shippingFeeAmount = useMemo(
-    () => calculateShippingFeeFromInput(formData.productWeight, formData.priority),
-    [formData.productWeight, formData.priority]
+    () => calculateShippingFeeFromInput(formData.productWeight, formData.priority, formData.weightUnit),
+    [formData.productWeight, formData.priority, formData.weightUnit]
   );
   const shippingFeeDisplay = shippingFeeAmount === null ? "" : formatShippingFee(shippingFeeAmount);
 
@@ -173,6 +177,76 @@ export default function NewShipmentPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Clear previous errors
+    setErrors({});
+
+    // Validate form
+    const newErrors: Record<string, string> = {};
+
+    if (!selectedAirline) {
+      newErrors.airline = "Please select an airline";
+    }
+
+    if (!selectedAirplane) {
+      newErrors.airplane = "Please select an airplane";
+    }
+
+    if (!formData.shippingDate) {
+      newErrors.shippingDate = "Shipping date is required";
+    }
+
+    if (!formData.sender.trim()) {
+      newErrors.sender = "Sender name is required";
+    }
+
+    if (!formData.receiver.trim()) {
+      newErrors.receiver = "Receiver name is required";
+    }
+
+    if (!formData.telpNumber.trim()) {
+      newErrors.telpNumber = "Telephone number is required";
+    } else if (formData.telpNumber.length < 10 || formData.telpNumber.length > 13) {
+      newErrors.telpNumber = "Phone number must be between 10 and 13 digits";
+    }
+
+    if (!formData.originIata) {
+      newErrors.originIata = "Origin airport is required";
+    }
+
+    if (!formData.destIata) {
+      newErrors.destIata = "Destination airport is required";
+    }
+
+    if (!formData.originAddress.trim()) {
+      newErrors.originAddress = "Origin address is required";
+    }
+
+    if (!formData.destinationAddress.trim()) {
+      newErrors.destinationAddress = "Destination address is required";
+    }
+
+    if (!formData.productType) {
+      newErrors.productType = "Product type is required";
+    }
+
+    if (!formData.productWeight || Number(formData.productWeight) <= 0) {
+      newErrors.productWeight = "Product weight must be greater than 0";
+    }
+
+    if (!formData.deliveryType) {
+      newErrors.deliveryType = "Delivery type is required";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      addNotification({
+        variant: 'destructive',
+        title: 'Validation Error',
+        description: 'Please fill in all required fields correctly.',
+      });
+      return;
+    }
+
     if (shippingFeeAmount === null) {
       addNotification({
         variant: 'destructive',
@@ -182,6 +256,11 @@ export default function NewShipmentPage() {
       return;
     }
 
+    // Show confirmation modal instead of submitting directly
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmCreate = async () => {
     setIsSubmitting(true);
 
     try {
@@ -199,6 +278,7 @@ export default function NewShipmentPage() {
       const data = await res.json();
 
       if (data.success) {
+        setShowConfirmModal(false);
         addNotification({
           variant: 'success',
           title: 'Shipment created successfully!',
@@ -229,6 +309,14 @@ export default function NewShipmentPage() {
   };
 
   const handleInputChange = (field: string, value: string) => {
+  // Clear error for this field when user starts typing
+  if (errors[field]) {
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[field];
+      return newErrors;
+    });
+  }
 
   if (field === "telpNumber") {
 
@@ -290,9 +378,18 @@ export default function NewShipmentPage() {
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Airline</label>
               <div className="relative">
                 <select
-                  className={selectStyle}
+                  className={`${selectStyle} ${errors.airline ? 'border-red-500' : ''}`}
                   value={selectedAirline || ""}
-                  onChange={(e) => setSelectedAirline(Number(e.target.value))}
+                  onChange={(e) => {
+                    setSelectedAirline(Number(e.target.value));
+                    if (errors.airline) {
+                      setErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors.airline;
+                        return newErrors;
+                      });
+                    }
+                  }}
                   required
                 >
                   <option value="">Select Airline</option>
@@ -304,15 +401,25 @@ export default function NewShipmentPage() {
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
+              <FormError message={errors.airline || ""} />
             </div>
 
             <div className="space-y-2">
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Airplane ID</label>
               <div className="relative">
                 <select
-                  className={selectStyle}
+                  className={`${selectStyle} ${errors.airplane ? 'border-red-500' : ''}`}
                   value={selectedAirplane || ""}
-                  onChange={(e) => setSelectedAirplane(Number(e.target.value))}
+                  onChange={(e) => {
+                    setSelectedAirplane(Number(e.target.value));
+                    if (errors.airplane) {
+                      setErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors.airplane;
+                        return newErrors;
+                      });
+                    }
+                  }}
                   disabled={!selectedAirline}
                   required
                 >
@@ -325,6 +432,7 @@ export default function NewShipmentPage() {
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
+              <FormError message={errors.airplane || ""} />
             </div>
 
             <div className="space-y-2">
@@ -346,11 +454,12 @@ export default function NewShipmentPage() {
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Shipping Date</label>
               <input
                 type="datetime-local"
-                className={standardInput}
+                className={`${standardInput} ${errors.shippingDate ? 'border-red-500' : ''}`}
                 value={formData.shippingDate}
                 onChange={(e) => handleInputChange('shippingDate', e.target.value)}
                 required
               />
+              <FormError message={errors.shippingDate || ""} />
             </div>
           </div>
         </div>
@@ -368,11 +477,12 @@ export default function NewShipmentPage() {
               <input
                  type="text"
                  placeholder="Enter sender name"
-                 className={standardInput}
+                 className={`${standardInput} ${errors.sender ? 'border-red-500' : ''}`}
                  value={formData.sender}
                  onChange={(e) => handleInputChange('sender', e.target.value)}
                  required
               />
+              <FormError message={errors.sender || ""} />
             </div>
 
             <div className="space-y-2">
@@ -380,11 +490,12 @@ export default function NewShipmentPage() {
               <input
                  type="text"
                  placeholder="Enter receiver name"
-                 className={standardInput}
+                 className={`${standardInput} ${errors.receiver ? 'border-red-500' : ''}`}
                  value={formData.receiver}
                  onChange={(e) => handleInputChange('receiver', e.target.value)}
                  required
                />
+              <FormError message={errors.receiver || ""} />
             </div>
 
             <div className="space-y-2">
@@ -395,7 +506,7 @@ export default function NewShipmentPage() {
     type="tel"
     placeholder="Enter your phone number"
     className={`${standardInput} ${
-      phoneError ? "border-red-500" : ""
+      phoneError || errors.telpNumber ? "border-red-500" : ""
     }`}
     value={formData.telpNumber}
     onChange={(e) => handleInputChange("telpNumber", e.target.value)}
@@ -408,12 +519,7 @@ export default function NewShipmentPage() {
   />
 </div>
 
-{phoneError && (
-  <p className="mt-1 text-xs text-red-600 font-medium">
-    {phoneError}
-  </p>
-)}
-                <FontAwesomeIcon icon={faPhone} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+<FormError message={errors.telpNumber || phoneError} />
               </div>
             </div>
           </div>
@@ -431,7 +537,7 @@ export default function NewShipmentPage() {
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Origin Airport (IATA)</label>
               <div className="relative">
                 <select
-                  className={selectStyle}
+                  className={`${selectStyle} ${errors.originIata ? 'border-red-500' : ''}`}
                   value={formData.originIata}
                   onChange={(e) => handleInputChange('originIata', e.target.value)}
                   required
@@ -445,13 +551,14 @@ export default function NewShipmentPage() {
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
+              <FormError message={errors.originIata || ""} />
             </div>
 
             <div className="space-y-2">
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Destination Airport (IATA)</label>
               <div className="relative">
                 <select
-                  className={selectStyle}
+                  className={`${selectStyle} ${errors.destIata ? 'border-red-500' : ''}`}
                   value={formData.destIata}
                   onChange={(e) => handleInputChange('destIata', e.target.value)}
                   required
@@ -465,6 +572,7 @@ export default function NewShipmentPage() {
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
+              <FormError message={errors.destIata || ""} />
             </div>
 
             <div className="space-y-2">
@@ -472,14 +580,15 @@ export default function NewShipmentPage() {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="123 Main St, City, Country"
-                  className={standardInput}
+                  placeholder="Enter Origin Address Details"
+                  className={`${standardInput} ${errors.originAddress ? 'border-red-500' : ''}`}
                   value={formData.originAddress}
                   onChange={(e) => handleInputChange('originAddress', e.target.value)}
                   required
                 />
                 <FontAwesomeIcon icon={faMapMarkerAlt} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               </div>
+              <FormError message={errors.originAddress || ""} />
             </div>
 
             <div className="space-y-2">
@@ -487,14 +596,15 @@ export default function NewShipmentPage() {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="456 Oak Ave, City, Country"
-                  className={standardInput}
+                  placeholder="Enter Destination Address Details"
+                  className={`${standardInput} ${errors.destinationAddress ? 'border-red-500' : ''}`}
                   value={formData.destinationAddress}
                   onChange={(e) => handleInputChange('destinationAddress', e.target.value)}
                   required
                 />
                 <FontAwesomeIcon icon={faMapMarkerAlt} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               </div>
+              <FormError message={errors.destinationAddress || ""} />
             </div>
 
             <div className="space-y-2">
@@ -528,7 +638,7 @@ export default function NewShipmentPage() {
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Product Type</label>
               <div className="relative">
                 <select
-                  className={selectStyle}
+                  className={`${selectStyle} ${errors.productType ? 'border-red-500' : ''}`}
                   value={formData.productType}
                   onChange={(e) => handleInputChange('productType', e.target.value)}
                   required
@@ -542,6 +652,7 @@ export default function NewShipmentPage() {
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
+              <FormError message={errors.productType || ""} />
             </div>
 
             <div className="space-y-2">
@@ -550,12 +661,13 @@ export default function NewShipmentPage() {
                 type="number"
                 step="0.001"
                 min="0"
-                placeholder="0.000"
-                className={standardInput}
+                placeholder="Enter Product Weight"
+                className={`${standardInput} ${errors.productWeight ? 'border-red-500' : ''}`}
                 value={formData.productWeight}
                 onChange={(e) => handleInputChange('productWeight', e.target.value)}
                 required
               />
+              <FormError message={errors.productWeight || ""} />
             </div>
 
             <div className="space-y-2">
@@ -581,7 +693,7 @@ export default function NewShipmentPage() {
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Delivery Type</label>
               <div className="relative">
                 <select
-                  className={selectStyle}
+                  className={`${selectStyle} ${errors.deliveryType ? 'border-red-500' : ''}`}
                   value={formData.deliveryType}
                   onChange={(e) => handleInputChange('deliveryType', e.target.value)}
                   required
@@ -595,6 +707,7 @@ export default function NewShipmentPage() {
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
+              <FormError message={errors.deliveryType || ""} />
             </div>
 
             <div className="space-y-2">
@@ -658,6 +771,19 @@ export default function NewShipmentPage() {
           </button>
         </div>
       </form>
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={handleConfirmCreate}
+        title="Confirm Shipment Creation"
+        description="Are you sure you want to create this shipment? Please verify all details are correct."
+        confirmText="Create Shipment"
+        cancelText="Review Details"
+        variant="create"
+        isLoading={isSubmitting}
+      />
     </div>
   );
 }

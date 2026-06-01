@@ -5,4 +5,5 @@ export * from './airlines';
 export * from './flights';
 export * from './shipments';
 export * from './password-resets';
+export * from './activity-logs';
 export * from './relations';

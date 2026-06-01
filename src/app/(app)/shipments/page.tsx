@@ -8,13 +8,17 @@ import { ShipmentTableSkeleton, StatCardSkeleton } from '@/components/ui/skeleto
 import { MenuItem, MenuContainer } from '@/components/ui/fluid-menu';
 import { MoreVertical, Eye, Edit, Trash2, X } from 'lucide-react';
 import { useNotifications } from '@/components/ui/notification-provider';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 
 type Shipment = {
   id: string;
   awbNumber: string;
   originAirport: { iataCode: string; name: string; city: string; country: string } | null;
   destAirport: { iataCode: string; name: string; city: string; country: string } | null;
-  flight: { flightId: string } | null;
+  flight: {
+    flightId: string;
+    airplane: { flightNumber: string } | null;
+  } | null;
   priority: 'standard' | 'express' | 'critical';
   status: 'pending' | 'processing' | 'in_transit' | 'delivered' | 'delayed' | 'cancelled';
   deliveryStatus: 'booked' | 'received_at_warehouse' | 'security_cleared' | 'manifested' | 'departed' | 'transshipment' | 'arrived_at_destination' | 'out_for_delivery' | 'ready_for_pickup' | 'delivered' | null;
@@ -104,6 +108,9 @@ function ShipmentsContent() {
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [shipmentToDelete, setShipmentToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [stats, setStats] = useState({
     active: 0,
     activePercentage: 0,
@@ -117,18 +124,25 @@ function ShipmentsContent() {
   const { addNotification } = useNotifications();
 
   const handleDelete = async (shipmentId: string) => {
-    if (!confirm('Are you sure you want to delete this shipment?')) {
-      return;
-    }
+    setShipmentToDelete(shipmentId);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!shipmentToDelete) return;
+
+    setIsDeleting(true);
 
     try {
-      const res = await fetch(`/api/shipments/${shipmentId}`, {
+      const res = await fetch(`/api/shipments/${shipmentToDelete}`, {
         method: 'DELETE',
       });
 
       const data = await res.json();
 
       if (data.success) {
+        setShowDeleteModal(false);
+        setShipmentToDelete(null);
         addNotification({
           variant: 'success',
           title: 'Shipment deleted successfully!',
@@ -150,6 +164,8 @@ function ShipmentsContent() {
         title: 'Failed to delete shipment',
         description: 'An unexpected error occurred. Please try again.',
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -572,8 +588,8 @@ function ShipmentsContent() {
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{Number(selectedShipment.weightKg).toFixed(0)} kg</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 5 }}>Flight</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{selectedShipment.flight?.flightId || 'N/A'}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 5 }}>Plane ID</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{selectedShipment.flight?.airplane?.flightNumber || 'N/A'}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 5 }}>Created</div>
@@ -584,6 +600,22 @@ function ShipmentsContent() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setShipmentToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Confirm Shipment Deletion"
+        description="Are you sure you want to delete this shipment? This action cannot be undone."
+        confirmText="Delete Shipment"
+        cancelText="Cancel"
+        variant="delete"
+        isLoading={isDeleting}
+      />
     </div>
   );
 }

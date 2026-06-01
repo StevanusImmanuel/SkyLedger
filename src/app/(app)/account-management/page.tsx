@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { requireRole } from '@/lib/auth/dal';
-import AccountManagementClient from './AccountManagementClient';
+import AccountManagementWrapper from './AccountManagementWrapper';
 
 export default async function AccountManagementPage() {
   try {
@@ -9,5 +9,5 @@ export default async function AccountManagementPage() {
     redirect('/login/restricted');
   }
 
-  return <AccountManagementClient />;
+  return <AccountManagementWrapper />;
 }

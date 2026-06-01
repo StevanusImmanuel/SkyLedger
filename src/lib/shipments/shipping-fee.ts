@@ -17,17 +17,19 @@ export function parseShipmentWeight(value: unknown) {
   return Number.isFinite(weight) ? weight : null;
 }
 
-export function calculateShippingFee(productWeight: number, priority: ShipmentPriority) {
-  return PRIORITY_RATES[priority] * (productWeight * 1.5);
+export function calculateShippingFee(productWeight: number, priority: ShipmentPriority, weightUnit: string = 'Kilogram') {
+  // Convert tonnes to kilograms if needed
+  const weightInKg = weightUnit === 'Tonnes' ? productWeight * 1000 : productWeight;
+  return PRIORITY_RATES[priority] * (weightInKg * 1.5);
 }
 
-export function calculateShippingFeeFromInput(productWeight: unknown, priority: unknown) {
+export function calculateShippingFeeFromInput(productWeight: unknown, priority: unknown, weightUnit: string = 'Kilogram') {
   if (!isShipmentPriority(priority)) return null;
 
   const weight = parseShipmentWeight(productWeight);
   if (weight === null || weight < 0) return null;
 
-  return calculateShippingFee(weight, priority);
+  return calculateShippingFee(weight, priority, weightUnit);
 }
 
 export function formatShippingFee(amount: number) {

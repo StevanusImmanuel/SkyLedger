@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { shipments } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
 import { gte, count, sum } from 'drizzle-orm';
+import { logActivity } from '@/lib/activity-logger';
 
 async function getAuthUser(req: NextRequest) {
   const token = req.cookies.get('terminal_session')?.value;
@@ -17,6 +18,23 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const daysBack = Math.min(Number(searchParams.get('days') ?? 7), 90);
   const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+  const format = searchParams.get('format'); // 'csv' or 'pdf'
+
+  // Log export activity if format is specified
+  if (format === 'csv' || format === 'pdf') {
+    await logActivity({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      action: 'export',
+      entityType: 'report',
+      details: {
+        format,
+        daysBack,
+      },
+      request,
+    });
+  }
 
   const [totals] = await db
     .select({ total: count(), totalWeight: sum(shipments.weightKg) })

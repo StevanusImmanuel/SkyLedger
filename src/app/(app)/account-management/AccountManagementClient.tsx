@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Edit, MoreVertical, Power, Plus, X } from 'lucide-react';
+import { Edit, MoreVertical, Power, Plus, X, Trash2 } from 'lucide-react';
 import { MenuContainer, MenuItem } from '@/components/ui/fluid-menu';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
+import { useNotifications } from '@/components/ui/notification-provider';
 
 type UserRole = 'admin' | 'operator' | 'viewer';
 
@@ -62,7 +64,12 @@ export default function AccountManagementClient() {
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<ManagedUser | null>(null);
+  const [showEditConfirmModal, setShowEditConfirmModal] = useState(false);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [userToDeactivate, setUserToDeactivate] = useState<ManagedUser | null>(null);
+  const { addNotification } = useNotifications();
 
   async function fetchUsers() {
     setIsLoading(true);
@@ -101,7 +108,6 @@ export default function AccountManagementClient() {
     setEditingUser(null);
     setForm(emptyForm);
     setError(null);
-    setMessage(null);
     setIsModalOpen(true);
   }
 
@@ -116,27 +122,35 @@ export default function AccountManagementClient() {
       isActive: user.isActive,
     });
     setError(null);
-    setMessage(null);
     setIsModalOpen(true);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsSaving(true);
     setError(null);
-    setMessage(null);
 
     if (!form.email.trim()) {
       setError('Email is required');
-      setIsSaving(false);
       return;
     }
 
     if (!editingUser && !form.password) {
       setError('Password is required');
-      setIsSaving(false);
       return;
     }
+
+    // Show confirmation modal for editing
+    if (editingUser) {
+      setShowEditConfirmModal(true);
+    } else {
+      // For creating new user, proceed directly
+      await confirmSubmit();
+    }
+  }
+
+  async function confirmSubmit() {
+    setIsSaving(true);
+    setShowEditConfirmModal(false);
 
     try {
       const payload = {
@@ -160,7 +174,10 @@ export default function AccountManagementClient() {
         return;
       }
 
-      setMessage(editingUser ? 'User updated successfully' : 'User created successfully');
+      addNotification({
+        title: editingUser ? 'User updated successfully' : 'User created successfully',
+        variant: 'success',
+      });
       setIsModalOpen(false);
       await fetchUsers();
     } catch {
@@ -171,14 +188,18 @@ export default function AccountManagementClient() {
   }
 
   async function handleDeactivate(user: ManagedUser) {
-    if (!confirm(`Deactivate ${user.name}?`)) return;
+    setUserToDeactivate(user);
+    setShowDeactivateModal(true);
+  }
+
+  async function confirmDeactivate() {
+    if (!userToDeactivate) return;
 
     setIsSaving(true);
     setError(null);
-    setMessage(null);
 
     try {
-      const response = await fetch(`/api/users?id=${user.id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/users?id=${userToDeactivate.id}`, { method: 'DELETE' });
       const json = await response.json();
 
       if (!response.ok || !json.success) {
@@ -186,10 +207,51 @@ export default function AccountManagementClient() {
         return;
       }
 
-      setMessage('User deactivated successfully');
+      addNotification({
+        title: 'User deactivated successfully',
+        variant: 'success',
+      });
+      setShowDeactivateModal(false);
+      setUserToDeactivate(null);
       await fetchUsers();
     } catch {
       setError('Failed to deactivate user');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleDelete(user: ManagedUser) {
+    setUserToDelete(user);
+    setShowDeleteModal(true);
+  }
+
+  async function confirmDelete() {
+    if (!userToDelete) return;
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/users?id=${userToDelete.id}&permanent=true`, {
+        method: 'DELETE'
+      });
+      const json = await response.json();
+
+      if (!response.ok || !json.success) {
+        setError(getApiMessage(json, 'Failed to delete user'));
+        return;
+      }
+
+      addNotification({
+        title: 'User deleted successfully',
+        variant: 'success',
+      });
+      setShowDeleteModal(false);
+      setUserToDelete(null);
+      await fetchUsers();
+    } catch {
+      setError('Failed to delete user');
     } finally {
       setIsSaving(false);
     }
@@ -199,8 +261,8 @@ export default function AccountManagementClient() {
     <div>
       <div className="sl-page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="sl-page-title">Manajemen Akun</h1>
-          <p className="sl-page-subtitle">Kelola akses pengguna SkyLedger</p>
+          <h1 className="sl-page-title">Account Management</h1>
+          <p className="sl-page-subtitle">Manage SkyLedger user access</p>
         </div>
         <button
           type="button"
@@ -224,23 +286,6 @@ export default function AccountManagementClient() {
           New User
         </button>
       </div>
-
-      {(message || error) && (
-        <div
-          style={{
-            marginBottom: 14,
-            padding: '10px 14px',
-            borderRadius: 8,
-            border: `1px solid ${error ? '#fecaca' : '#bbf7d0'}`,
-            background: error ? '#fff5f5' : '#f0fdf4',
-            color: error ? '#b91c1c' : '#15803d',
-            fontSize: 12.5,
-            fontWeight: 700,
-          }}
-        >
-          {error || message}
-        </div>
-      )}
 
       <div className="sl-reports-stats">
         <div className="sl-rstat-card">
@@ -345,6 +390,11 @@ export default function AccountManagementClient() {
                           icon={<Power size={18} strokeWidth={1.5} />}
                           onClick={() => handleDeactivate(user)}
                           disabled={isSaving || !user.isActive || user.id === currentUser?.id}
+                        />
+                        <MenuItem
+                          icon={<Trash2 size={18} strokeWidth={1.5} />}
+                          onClick={() => handleDelete(user)}
+                          disabled={isSaving || user.id === currentUser?.id}
                         />
                       </MenuContainer>
                     </div>
@@ -516,6 +566,51 @@ export default function AccountManagementClient() {
           </form>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setUserToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Permanently Delete User"
+        description={`Are you sure you want to permanently delete ${userToDelete?.name}? This action cannot be undone and will remove all user data from the system.`}
+        confirmText="Delete User"
+        cancelText="Cancel"
+        variant="delete"
+        isLoading={isSaving}
+      />
+
+      {/* Edit Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showEditConfirmModal}
+        onClose={() => setShowEditConfirmModal(false)}
+        onConfirm={confirmSubmit}
+        title="Confirm User Update"
+        description={`Are you sure you want to update ${editingUser?.name}'s account information?`}
+        confirmText="Update User"
+        cancelText="Cancel"
+        variant="default"
+        isLoading={isSaving}
+      />
+
+      {/* Deactivate Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showDeactivateModal}
+        onClose={() => {
+          setShowDeactivateModal(false);
+          setUserToDeactivate(null);
+        }}
+        onConfirm={confirmDeactivate}
+        title="Deactivate User"
+        description={`Are you sure you want to deactivate ${userToDeactivate?.name}? The user will no longer be able to access the system.`}
+        confirmText="Deactivate User"
+        cancelText="Cancel"
+        variant="deactivate"
+        isLoading={isSaving}
+      />
     </div>
   );
 }

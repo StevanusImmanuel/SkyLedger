@@ -44,6 +44,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# markdown files
+*.md
+
 # Keep important documentation
+!README.md
 !ERD.md
 !Design.md
+
+# SQL files
+*.sql

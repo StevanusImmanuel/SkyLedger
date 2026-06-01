@@ -91,7 +91,7 @@ export function MenuContainer({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="relative w-[32px]" data-expanded={isExpanded} style={{ zIndex: isExpanded ? 100 : 1 }}>
+    <div className="relative w-[32px]" data-expanded={isExpanded} style={{ zIndex: isExpanded ? 1000 : 1 }}>
       {/* Container for all items */}
       <div className="relative">
         {/* First item - always visible */}

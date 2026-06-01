@@ -5,6 +5,7 @@ import { hashPassword, verifyPassword } from '@/lib/auth/password';
 import { createSession, deleteSession } from '@/lib/auth/session';
 import { loginSchema, registerSchema } from '@/lib/validations/auth';
 import { eq } from 'drizzle-orm';
+import { logActivity } from '@/lib/activity-logger';
 
 function generateSkyledgerId(): string {
   const random = Math.floor(1000 + Math.random() * 9000);
@@ -45,6 +46,17 @@ export async function POST(request: NextRequest) {
       const ip = request.headers.get('x-forwarded-for') ?? undefined;
       const ua = request.headers.get('user-agent') ?? undefined;
       const { token, expiresAt } = await createSession(user.id, ip, ua);
+
+      // Log login activity
+      await logActivity({
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        action: 'login',
+        entityType: 'auth',
+        details: { email: user.email },
+        request,
+      });
 
       const res = NextResponse.json({
         success: true,
@@ -90,7 +102,25 @@ export async function POST(request: NextRequest) {
 
     if (action === 'logout') {
       const token = request.cookies.get('terminal_session')?.value;
-      if (token) await deleteSession(token);
+      if (token) {
+        // Get user info before deleting session
+        const { getSessionUser } = await import('@/lib/auth/session');
+        const user = await getSessionUser(token);
+
+        await deleteSession(token);
+
+        // Log logout activity
+        if (user) {
+          await logActivity({
+            userId: user.id,
+            userName: user.name,
+            userRole: user.role,
+            action: 'logout',
+            entityType: 'auth',
+            request,
+          });
+        }
+      }
       const res = NextResponse.json({ success: true });
       res.cookies.delete('terminal_session');
       return res;

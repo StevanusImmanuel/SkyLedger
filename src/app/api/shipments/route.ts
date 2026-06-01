@@ -8,6 +8,7 @@ import {
   isShipmentPriority,
 } from '@/lib/shipments/shipping-fee';
 import { eq, desc, and, or, ilike, count, gte, lte, SQL } from 'drizzle-orm';
+import { logActivity } from '@/lib/activity-logger';
 
 async function getAuthUser(req: NextRequest) {
   const token = req.cookies.get('terminal_session')?.value;
@@ -71,6 +72,19 @@ export async function GET(request: NextRequest) {
     const dateTo = searchParams.get('dateTo') || '';
     const limit = Math.min(Number(searchParams.get('limit') ?? 50), 1000);
     const offset = Number(searchParams.get('offset') ?? 0);
+
+    // Log search activity if search parameter is provided
+    if (search) {
+      await logActivity({
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        action: 'search',
+        entityType: 'shipment',
+        details: { searchQuery: search },
+        request,
+      });
+    }
 
     const conditions: SQL[] = [];
 
@@ -200,13 +214,30 @@ export async function POST(request: NextRequest) {
       db.query.airports.findFirst({ where: eq(airports.iataCode, destIata) }),
     ]);
 
-    // Find available flight
-    const availableFlight = await db.query.flights.findFirst({
+    // Find or create a flight for the airplane
+    let availableFlight = await db.query.flights.findFirst({
       where: and(
         eq(flights.airplaneId, airplaneId),
         eq(flights.status, 'scheduled')
       ),
     });
+
+    // If no scheduled flight exists, create one
+    if (!availableFlight) {
+      const [newFlight] = await db
+        .insert(flights)
+        .values({
+          airlineId: airlineId,
+          airplaneId: airplaneId,
+          originAirportId: originAirport?.id,
+          destAirportId: destAirport?.id,
+          departureTime: shippingDate ? new Date(shippingDate) : new Date(),
+          arrivalTime: shippingDate ? new Date(new Date(shippingDate).getTime() + 3 * 24 * 60 * 60 * 1000) : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+          status: 'scheduled',
+        })
+        .returning();
+      availableFlight = newFlight;
+    }
 
     // Generate AWB with airline code
     const awbNumber = generateAwbNumber(airline.airlineCode);
@@ -270,6 +301,24 @@ export async function POST(request: NextRequest) {
       location: originAddress,
       notes: `Shipment created - ${deliveryStatus || 'Booked'}`,
       changedBy: user.id,
+    });
+
+    // Log shipment creation activity
+    await logActivity({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      action: 'create',
+      entityType: 'shipment',
+      entityId: newShipment.id,
+      details: {
+        awbNumber: newShipment.awbNumber,
+        origin: originIata,
+        destination: destIata,
+        weight: productWeight,
+        priority,
+      },
+      request,
     });
 
     return NextResponse.json({ success: true, data: newShipment }, { status: 201 });

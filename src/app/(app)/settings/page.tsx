@@ -2,20 +2,11 @@
 import { useEffect, useState } from 'react';
 
 export default function SettingsPage() {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    const savedTheme = (localStorage.getItem('theme') || 'light') as 'light' | 'dark';
-    setTheme(savedTheme);
   }, []);
-
-  const handleThemeChange = (newTheme: 'light' | 'dark') => {
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
-  };
 
   if (!mounted) {
     return null;
@@ -124,61 +115,6 @@ export default function SettingsPage() {
               </div>
               <button className="sl-terminate-btn">Terminate</button>
             </div>
-          </div>
-        </div>
-
-        {/* Right Column - Preferences */}
-        <div>
-          <div className="sl-settings-card">
-            <div className="sl-settings-section-title">
-              <span>Preferences</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="12" y1="18" x2="20" y2="18"/></svg>
-            </div>
-
-            {/* Interface Theme */}
-            <label className="sl-pref-label">Interface Theme</label>
-            <div className="sl-theme-options">
-              <button
-                onClick={() => handleThemeChange('light')}
-                className="sl-theme-option"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-              >
-                <div className={`sl-theme-preview sl-theme-light ${theme === 'light' ? 'selected' : ''}`}>
-                  <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #f0f4f8 40%, #dbeafe 100%)' }} />
-                </div>
-                <span className="sl-theme-label" style={{ color: theme === 'light' ? '#1a2d5a' : '#94a3b8', fontWeight: theme === 'light' ? 700 : 600 }}>Light Blue</span>
-              </button>
-              <button
-                onClick={() => handleThemeChange('dark')}
-                className="sl-theme-option"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-              >
-                <div className={`sl-theme-preview sl-theme-dark ${theme === 'dark' ? 'selected' : ''}`}>
-                  <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #1e293b 40%, #0f172a 100%)' }} />
-                </div>
-                <span className="sl-theme-label" style={{ color: theme === 'dark' ? '#1a2d5a' : '#94a3b8', fontWeight: theme === 'dark' ? 700 : 600 }}>Deep Navy</span>
-              </button>
-            </div>
-
-            {/* Notifications */}
-            <label className="sl-pref-label" style={{ marginTop: 16, display: 'block' }}>Notifications</label>
-            <div className="sl-notif-row">
-              <span className="sl-notif-label">Email Alerts</span>
-              <input type="checkbox" className="sl-checkbox" defaultChecked />
-            </div>
-            <div className="sl-notif-row">
-              <span className="sl-notif-label">SMS Critical Updates</span>
-              <input type="checkbox" className="sl-checkbox" />
-            </div>
-
-            {/* Timezone */}
-            <label className="sl-pref-label" style={{ marginTop: 16, display: 'block' }}>Timezone</label>
-            <select className="sl-tz-select">
-              <option>(GMT+00:00) London, Lisbon, Casablanca</option>
-              <option>(GMT+07:00) Bangkok, Hanoi, Jakarta</option>
-              <option>(GMT-05:00) New York, Toronto</option>
-              <option>(GMT+08:00) Singapore, Kuala Lumpur</option>
-            </select>
           </div>
         </div>
       </div>
