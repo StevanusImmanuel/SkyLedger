@@ -86,6 +86,7 @@ export default function NewShipmentPage() {
   const [selectedAirplane, setSelectedAirplane] = useState<number | null>(null);
   const [awbNumber, setAwbNumber] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
 
   // Form fields
   const [formData, setFormData] = useState({
@@ -228,12 +229,38 @@ export default function NewShipmentPage() {
   };
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
+
+  if (field === "telpNumber") {
+
+    // Jika user mengetik huruf
+    if (/[^0-9]/.test(value)) {
+      setPhoneError("Phone number must contain digits only.");
+    } else if (value.length > 0 && (value.length < 10 || value.length > 13)) {
+      setPhoneError("Phone number must be between 10 and 13 digits.");
+    } else {
+      setPhoneError("");
+    }
+
+    // Hanya simpan angka
+    const onlyNumbers = value.replace(/\D/g, "").slice(0, 13);
+
+    setFormData(prev => ({
+      ...prev,
+      [field]: onlyNumbers,
+    }));
+
+    return;
+  }
+
+  setFormData(prev => ({
+    ...prev,
+    [field]: value,
+  }));
+};
 
   // Shared classes for uniformity and readability
   const heavyInput = "w-full bg-[#e9ecef] border-2 border-transparent py-5 px-5 rounded-lg font-mono text-2xl text-slate-900 font-bold focus:ring-0 focus:border-[#00236f] transition-all placeholder:text-slate-400 outline-none";
-  const standardInput = "w-full bg-white border border-slate-300 rounded-lg p-4 font-bold text-base text-slate-900 focus:border-[#00236f] focus:ring-1 focus:ring-[#00236f] outline-none transition-all placeholder:text-slate-400";
+  const standardInput = "w-full bg-white border border-slate-300 rounded-lg p-4 font-bold text-sm text-slate-900 focus:border-[#00236f] focus:ring-1 focus:ring-[#00236f] outline-none transition-all placeholder:text-slate-400";
   const selectStyle = "w-full bg-white border border-slate-300 rounded-lg p-4 text-base font-bold text-slate-900 focus:border-[#00236f] focus:ring-1 focus:ring-[#00236f] outline-none appearance-none cursor-pointer";
 
   return (
@@ -339,38 +366,53 @@ export default function NewShipmentPage() {
             <div className="space-y-2">
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Sender Name</label>
               <input
-                type="text"
-                placeholder="John Doe"
-                className={standardInput}
-                value={formData.sender}
-                onChange={(e) => handleInputChange('sender', e.target.value)}
-                required
+                 type="text"
+                 placeholder="Enter sender name"
+                 className={standardInput}
+                 value={formData.sender}
+                 onChange={(e) => handleInputChange('sender', e.target.value)}
+                 required
               />
             </div>
 
             <div className="space-y-2">
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Receiver Name</label>
               <input
-                type="text"
-                placeholder="Jane Smith"
-                className={standardInput}
-                value={formData.receiver}
-                onChange={(e) => handleInputChange('receiver', e.target.value)}
-                required
-              />
+                 type="text"
+                 placeholder="Enter receiver name"
+                 className={standardInput}
+                 value={formData.receiver}
+                 onChange={(e) => handleInputChange('receiver', e.target.value)}
+                 required
+               />
             </div>
 
             <div className="space-y-2">
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Telephone Number</label>
               <div className="relative">
-                <input
-                  type="tel"
-                  placeholder="+1234567890"
-                  className={standardInput}
-                  value={formData.telpNumber}
-                  onChange={(e) => handleInputChange('telpNumber', e.target.value)}
-                  required
-                />
+                <div className="relative">
+  <input
+    type="tel"
+    placeholder="Enter your phone number"
+    className={`${standardInput} ${
+      phoneError ? "border-red-500" : ""
+    }`}
+    value={formData.telpNumber}
+    onChange={(e) => handleInputChange("telpNumber", e.target.value)}
+    required
+  />
+
+  <FontAwesomeIcon
+    icon={faPhone}
+    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"
+  />
+</div>
+
+{phoneError && (
+  <p className="mt-1 text-xs text-red-600 font-medium">
+    {phoneError}
+  </p>
+)}
                 <FontAwesomeIcon icon={faPhone} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               </div>
             </div>
