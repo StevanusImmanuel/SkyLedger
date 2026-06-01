@@ -56,6 +56,11 @@ type Shipment = {
   weightKg: string;
   notes: string | null;
   createdAt: string;
+
+  // Menggunakan tipe any agar aman dari eror TypeScript linting
+  sender_name?: any;
+  receiver_name?: any;
+  telp_number?: any;
 };
 
 const PRODUCT_TYPES = [
@@ -97,8 +102,9 @@ export default function EditShipmentPage() {
   const [selectedAirplane, setSelectedAirplane] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  
 
-  // Form fields (updatable fields from CRUDDB.md)
+  // Form fields (State internal form aplikasi)
   const [formData, setFormData] = useState({
     deliveryStatus: "",
     productType: "",
@@ -114,6 +120,7 @@ export default function EditShipmentPage() {
     receiver: "",
     telpNumber: "",
   });
+
   const shippingFeeAmount = useMemo(
     () => calculateShippingFeeFromInput(formData.productWeight, formData.priority),
     [formData.productWeight, formData.priority]
@@ -129,7 +136,6 @@ export default function EditShipmentPage() {
         if (data.success) {
           const shipment: Shipment = data.data;
 
-          // Map delivery status enum to display format
           const deliveryStatusMap: Record<string, string> = {
             'booked': 'Booked',
             'received_at_warehouse': 'Received at Warehouse',
@@ -147,6 +153,7 @@ export default function EditShipmentPage() {
             ? deliveryStatusMap[shipment.deliveryStatus] || 'Booked'
             : 'Booked';
 
+          // Perbaikan Poin 3: Mengambil nama kolom database yang sesuai standar (snake_case)
           setFormData({
             deliveryStatus: displayDeliveryStatus,
             productType: shipment.productType || "",
@@ -158,10 +165,11 @@ export default function EditShipmentPage() {
             originIata: shipment.originAirport?.iataCode || "",
             destIata: shipment.destAirport?.iataCode || "",
             notes: shipment.notes || "",
-            sender: "",
-            receiver: "",
-            telpNumber: "",
+            sender: shipment.sender_name || "",       
+            receiver: shipment.receiver_name || "",    
+            telpNumber: shipment.telp_number || "",   
           });
+
           if (shipment.flight?.airline?.airlineId) {
             setSelectedAirline(shipment.flight.airline.airlineId);
           }
@@ -286,12 +294,20 @@ export default function EditShipmentPage() {
     }
   };
 
+  // Perbaikan Poin 2: Menghapus huruf (Regex \D) & batasi maksimal 12 digit angka nomor telepon
   const handleInputChange = (field: string, value: string) => {
+    if (field === 'telpNumber') {
+      const onlyNumbers = value.replace(/\D/g, "");
+      const truncatedValue = onlyNumbers.slice(0, 12);
+      
+      setFormData(prev => ({ ...prev, [field]: truncatedValue }));
+      return;
+    }
+
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Shared classes for uniformity and readability
-  const standardInput = "w-full bg-white border border-slate-300 rounded-lg p-4 font-bold text-base text-slate-900 focus:border-[#00236f] focus:ring-1 focus:ring-[#00236f] outline-none transition-all placeholder:text-slate-400";
+  const standardInput = "w-full bg-white border border-slate-300 rounded-lg p-4 font-bold text-sm text-slate-900 focus:border-[#00236f] focus:ring-1 focus:ring-[#00236f] outline-none transition-all placeholder:text-slate-400";
   const selectStyle = "w-full bg-white border border-slate-300 rounded-lg p-4 text-base font-bold text-slate-900 focus:border-[#00236f] focus:ring-1 focus:ring-[#00236f] outline-none appearance-none cursor-pointer";
 
   if (isLoading) {
@@ -408,7 +424,7 @@ export default function EditShipmentPage() {
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Sender Name</label>
               <input
                 type="text"
-                placeholder="John Doe"
+                placeholder="Type your name here"
                 className={standardInput}
                 value={formData.sender}
                 onChange={(e) => handleInputChange('sender', e.target.value)}
@@ -419,7 +435,7 @@ export default function EditShipmentPage() {
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Receiver Name</label>
               <input
                 type="text"
-                placeholder="Jane Smith"
+                placeholder="Type your name here"
                 className={standardInput}
                 value={formData.receiver}
                 onChange={(e) => handleInputChange('receiver', e.target.value)}
@@ -431,7 +447,7 @@ export default function EditShipmentPage() {
               <div className="relative">
                 <input
                   type="tel"
-                  placeholder="+1234567890"
+                  placeholder="Enter your phone number"
                   className={standardInput}
                   value={formData.telpNumber}
                   onChange={(e) => handleInputChange('telpNumber', e.target.value)}
