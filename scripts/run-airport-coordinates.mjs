@@ -9,6 +9,7 @@ const rootDir = resolve(__dirname, '..');
 
 const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
+
 if (!databaseUrl) {
   console.error('DATABASE_URL or POSTGRES_URL is required.');
   process.exit(1);

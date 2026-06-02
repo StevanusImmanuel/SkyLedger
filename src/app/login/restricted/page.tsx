@@ -2,12 +2,14 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { StyledWrapper } from '@/components/auth/authstyle';
+import { PageTitle } from '@/components/ui/page-title';
 
 export default function RestrictedPage() {
   const router = useRouter();
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-slate-50">
+      <PageTitle title="Access Restricted" />
       <StyledWrapper>
         <div className="auth-card text-center">
           <div className="flex justify-center mb-6">

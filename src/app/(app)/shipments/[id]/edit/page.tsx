@@ -18,6 +18,8 @@ import {
   calculateShippingFeeFromInput,
   formatShippingFee,
 } from "@/lib/shipments/shipping-fee";
+import { PageTitle } from "@/components/ui/page-title";
+import { FormError } from "@/components/ui/form-error";
 
 type Airline = {
   airlineId: number;
@@ -104,6 +106,7 @@ export default function EditShipmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   
 
   // Form fields (State internal form aplikasi)
@@ -257,6 +260,80 @@ export default function EditShipmentPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Clear previous errors
+    setErrors({});
+
+    // Validate form
+    const newErrors: Record<string, string> = {};
+
+    if (!selectedAirline) {
+      newErrors.airline = "Please select an airline";
+    }
+
+    if (!selectedAirplane) {
+      newErrors.airplane = "Please select an airplane";
+    }
+
+    if (!formData.shippingDate) {
+      newErrors.shippingDate = "Shipping date is ";
+    }
+
+    if (!formData.sender.trim()) {
+      newErrors.sender = "Sender name is ";
+    }
+
+    if (!formData.receiver.trim()) {
+      newErrors.receiver = "Receiver name is ";
+    }
+
+    if (!formData.telpNumber.trim()) {
+      newErrors.telpNumber = "Telephone number is ";
+    } else if (!/^\d+$/.test(formData.telpNumber)) {
+      newErrors.telpNumber = "Phone number must contain only digits";
+    } else if (formData.telpNumber.length < 10 || formData.telpNumber.length > 13) {
+      newErrors.telpNumber = "Phone number must be between 10 and 13 digits";
+    }
+
+    if (!formData.originIata) {
+      newErrors.originIata = "Origin airport is ";
+    }
+
+    if (!formData.destIata) {
+      newErrors.destIata = "Destination airport is ";
+    }
+
+    if (formData.originIata && formData.destIata && formData.originIata === formData.destIata) {
+      newErrors.destIata = "Destination airport must be different from origin airport";
+    }
+
+    if (!formData.originAddress.trim()) {
+      newErrors.originAddress = "Origin address is ";
+    }
+
+    if (!formData.destinationAddress.trim()) {
+      newErrors.destinationAddress = "Destination address is ";
+    }
+
+    if (!formData.productType) {
+      newErrors.productType = "Product type is ";
+    }
+
+    if (!formData.productWeight || Number(formData.productWeight) <= 0) {
+      newErrors.productWeight = "Product weight must be greater than 0";
+    } else if (isNaN(Number(formData.productWeight))) {
+      newErrors.productWeight = "Product weight must be a valid number";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      addNotification({
+        variant: 'destructive',
+        title: 'Validation Error',
+        description: 'Please fill in all  fields correctly.',
+      });
+      return;
+    }
+
     if (shippingFeeAmount === null) {
       addNotification({
         variant: 'destructive',
@@ -323,12 +400,22 @@ export default function EditShipmentPage() {
     if (field === 'telpNumber') {
       const onlyNumbers = value.replace(/\D/g, "");
       const truncatedValue = onlyNumbers.slice(0, 12);
-      
+
       setFormData(prev => ({ ...prev, [field]: truncatedValue }));
+
+      // Clear error when user types
+      if (errors.telpNumber) {
+        setErrors(prev => ({ ...prev, telpNumber: '' }));
+      }
       return;
     }
 
     setFormData(prev => ({ ...prev, [field]: value }));
+
+    // Clear error for this field when user types
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
   };
 
   const standardInput = "w-full bg-white border border-slate-300 rounded-lg p-4 font-bold text-sm text-slate-900 focus:border-[#00236f] focus:ring-1 focus:ring-[#00236f] outline-none transition-all placeholder:text-slate-400";
@@ -346,6 +433,7 @@ export default function EditShipmentPage() {
 
   return (
     <div className="p-10 max-w-6xl mx-auto w-full animate-in fade-in duration-500">
+      <PageTitle title="Edit Shipment" />
       {/* Page Header */}
       <div className="mb-10">
         <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#00236f] bg-blue-100 px-2 py-1 rounded">
@@ -371,9 +459,14 @@ export default function EditShipmentPage() {
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Airline</label>
               <div className="relative">
                 <select
-                  className={selectStyle}
+                  className={`${selectStyle} ${errors.airline ? 'border-red-500' : ''}`}
                   value={selectedAirline || ""}
-                  onChange={(e) => setSelectedAirline(Number(e.target.value))}
+                  onChange={(e) => {
+                    setSelectedAirline(Number(e.target.value));
+                    if (errors.airline) {
+                      setErrors(prev => ({ ...prev, airline: '' }));
+                    }
+                  }}
                 >
                   <option value="">Select Airline</option>
                   {airlines.map((airline) => (
@@ -384,15 +477,21 @@ export default function EditShipmentPage() {
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
+              <FormError message={errors.airline || ""} />
             </div>
 
             <div className="space-y-2">
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Airplane ID</label>
               <div className="relative">
                 <select
-                  className={selectStyle}
+                  className={`${selectStyle} ${errors.airplane ? 'border-red-500' : ''}`}
                   value={selectedAirplane || ""}
-                  onChange={(e) => setSelectedAirplane(Number(e.target.value))}
+                  onChange={(e) => {
+                    setSelectedAirplane(Number(e.target.value));
+                    if (errors.airplane) {
+                      setErrors(prev => ({ ...prev, airplane: '' }));
+                    }
+                  }}
                   disabled={!selectedAirline}
                 >
                   <option value="">Select Airplane</option>
@@ -404,16 +503,23 @@ export default function EditShipmentPage() {
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
+              <FormError message={errors.airplane || ""} />
             </div>
 
             <div className="space-y-2">
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Shipping Date</label>
               <input
                 type="datetime-local"
-                className={standardInput}
+                className={`${standardInput} ${errors.shippingDate ? 'border-red-500' : ''}`}
                 value={formData.shippingDate}
-                onChange={(e) => handleInputChange('shippingDate', e.target.value)}
+                onChange={(e) => {
+                  handleInputChange('shippingDate', e.target.value);
+                  if (errors.shippingDate) {
+                    setErrors(prev => ({ ...prev, shippingDate: '' }));
+                  }
+                }}
               />
+              <FormError message={errors.shippingDate || ""} />
             </div>
 
             <div className="space-y-2">
@@ -449,10 +555,16 @@ export default function EditShipmentPage() {
               <input
                 type="text"
                 placeholder="Type your name here"
-                className={standardInput}
+                className={`${standardInput} ${errors.sender ? 'border-red-500' : ''}`}
                 value={formData.sender}
-                onChange={(e) => handleInputChange('sender', e.target.value)}
+                onChange={(e) => {
+                  handleInputChange('sender', e.target.value);
+                  if (errors.sender) {
+                    setErrors(prev => ({ ...prev, sender: '' }));
+                  }
+                }}
               />
+              <FormError message={errors.sender || ""} />
             </div>
 
             <div className="space-y-2">
@@ -460,10 +572,16 @@ export default function EditShipmentPage() {
               <input
                 type="text"
                 placeholder="Type your name here"
-                className={standardInput}
+                className={`${standardInput} ${errors.receiver ? 'border-red-500' : ''}`}
                 value={formData.receiver}
-                onChange={(e) => handleInputChange('receiver', e.target.value)}
+                onChange={(e) => {
+                  handleInputChange('receiver', e.target.value);
+                  if (errors.receiver) {
+                    setErrors(prev => ({ ...prev, receiver: '' }));
+                  }
+                }}
               />
+              <FormError message={errors.receiver || ""} />
             </div>
 
             <div className="space-y-2">
@@ -472,12 +590,18 @@ export default function EditShipmentPage() {
                 <input
                   type="tel"
                   placeholder="Enter your phone number"
-                  className={standardInput}
+                  className={`${standardInput} ${errors.telpNumber ? 'border-red-500' : ''}`}
                   value={formData.telpNumber}
-                  onChange={(e) => handleInputChange('telpNumber', e.target.value)}
+                  onChange={(e) => {
+                    handleInputChange('telpNumber', e.target.value);
+                    if (errors.telpNumber) {
+                      setErrors(prev => ({ ...prev, telpNumber: '' }));
+                    }
+                  }}
                 />
                 <FontAwesomeIcon icon={faPhone} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               </div>
+              <FormError message={errors.telpNumber || ""} />
             </div>
           </div>
         </div>
@@ -494,9 +618,14 @@ export default function EditShipmentPage() {
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Origin Airport (IATA)</label>
               <div className="relative">
                 <select
-                  className={selectStyle}
+                  className={`${selectStyle} ${errors.originIata ? 'border-red-500' : ''}`}
                   value={formData.originIata}
-                  onChange={(e) => handleInputChange('originIata', e.target.value)}
+                  onChange={(e) => {
+                    handleInputChange('originIata', e.target.value);
+                    if (errors.originIata) {
+                      setErrors(prev => ({ ...prev, originIata: '' }));
+                    }
+                  }}
                 >
                   <option value="">Select Origin</option>
                   {airports.map((airport) => (
@@ -507,15 +636,21 @@ export default function EditShipmentPage() {
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
+              <FormError message={errors.originIata || ""} />
             </div>
 
             <div className="space-y-2">
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Destination Airport (IATA)</label>
               <div className="relative">
                 <select
-                  className={selectStyle}
+                  className={`${selectStyle} ${errors.destIata ? 'border-red-500' : ''}`}
                   value={formData.destIata}
-                  onChange={(e) => handleInputChange('destIata', e.target.value)}
+                  onChange={(e) => {
+                    handleInputChange('destIata', e.target.value);
+                    if (errors.destIata) {
+                      setErrors(prev => ({ ...prev, destIata: '' }));
+                    }
+                  }}
                 >
                   <option value="">Select Destination</option>
                   {airports.map((airport) => (
@@ -526,6 +661,7 @@ export default function EditShipmentPage() {
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
+              <FormError message={errors.destIata || ""} />
             </div>
 
             <div className="space-y-2">
@@ -534,12 +670,18 @@ export default function EditShipmentPage() {
                 <input
                   type="text"
                   placeholder="123 Main St, City, Country"
-                  className={standardInput}
+                  className={`${standardInput} ${errors.originAddress ? 'border-red-500' : ''}`}
                   value={formData.originAddress}
-                  onChange={(e) => handleInputChange('originAddress', e.target.value)}
+                  onChange={(e) => {
+                    handleInputChange('originAddress', e.target.value);
+                    if (errors.originAddress) {
+                      setErrors(prev => ({ ...prev, originAddress: '' }));
+                    }
+                  }}
                 />
                 <FontAwesomeIcon icon={faMapMarkerAlt} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               </div>
+              <FormError message={errors.originAddress || ""} />
             </div>
 
             <div className="space-y-2">
@@ -548,12 +690,18 @@ export default function EditShipmentPage() {
                 <input
                   type="text"
                   placeholder="456 Oak Ave, City, Country"
-                  className={standardInput}
+                  className={`${standardInput} ${errors.destinationAddress ? 'border-red-500' : ''}`}
                   value={formData.destinationAddress}
-                  onChange={(e) => handleInputChange('destinationAddress', e.target.value)}
+                  onChange={(e) => {
+                    handleInputChange('destinationAddress', e.target.value);
+                    if (errors.destinationAddress) {
+                      setErrors(prev => ({ ...prev, destinationAddress: '' }));
+                    }
+                  }}
                 />
                 <FontAwesomeIcon icon={faMapMarkerAlt} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               </div>
+              <FormError message={errors.destinationAddress || ""} />
             </div>
           </div>
         </div>
@@ -586,9 +734,14 @@ export default function EditShipmentPage() {
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Product Type</label>
               <div className="relative">
                 <select
-                  className={selectStyle}
+                  className={`${selectStyle} ${errors.productType ? 'border-red-500' : ''}`}
                   value={formData.productType}
-                  onChange={(e) => handleInputChange('productType', e.target.value)}
+                  onChange={(e) => {
+                    handleInputChange('productType', e.target.value);
+                    if (errors.productType) {
+                      setErrors(prev => ({ ...prev, productType: '' }));
+                    }
+                  }}
                 >
                   <option value="">Select Product Type</option>
                   {PRODUCT_TYPES.map((type) => (
@@ -599,6 +752,7 @@ export default function EditShipmentPage() {
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
+              <FormError message={errors.productType || ""} />
             </div>
 
             <div className="space-y-2">
@@ -607,11 +761,17 @@ export default function EditShipmentPage() {
                 type="number"
                 step="0.001"
                 min="0"
-                placeholder="0.000"
-                className={standardInput}
+                placeholder="0.000 (must be a number)"
+                className={`${standardInput} ${errors.productWeight ? 'border-red-500' : ''}`}
                 value={formData.productWeight}
-                onChange={(e) => handleInputChange('productWeight', e.target.value)}
+                onChange={(e) => {
+                  handleInputChange('productWeight', e.target.value);
+                  if (errors.productWeight) {
+                    setErrors(prev => ({ ...prev, productWeight: '' }));
+                  }
+                }}
               />
+              <FormError message={errors.productWeight || ""} />
             </div>
 
             <div className="space-y-2">

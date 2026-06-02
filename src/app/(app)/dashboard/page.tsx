@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { ShipmentMap } from '@/components/dashboard/ShipmentMap';
 import { RouteTableSkeleton, ChartSkeleton } from '@/components/ui/skeletons';
+import { PageTitle } from '@/components/ui/page-title';
 
 type ShipmentMapData = {
   id: string;
@@ -79,6 +80,7 @@ function DashboardContent() {
 
   return (
     <div>
+      <PageTitle title="Dashboard" />
       {/* Page Header */}
       <div className="sl-page-header">
         <h1 className="sl-page-title">Operations Analytics</h1>

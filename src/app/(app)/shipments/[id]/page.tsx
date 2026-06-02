@@ -10,6 +10,7 @@ import {
   calculateShippingFeeFromInput,
   formatShippingFee,
 } from "@/lib/shipments/shipping-fee";
+import { PageTitle } from "@/components/ui/page-title";
 
 const ShipmentRouteMap = dynamic(
   () => import("@/components/shipments/ShipmentRouteMap"),
@@ -281,6 +282,7 @@ export default function ShipmentDetailPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl p-6 md:p-10">
+      <PageTitle title={`Shipment ${shipment.awbNumber}`} />
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <Link href="/shipments" className="mb-4 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.4px] text-[#64748b] hover:text-[#1a2d5a]">

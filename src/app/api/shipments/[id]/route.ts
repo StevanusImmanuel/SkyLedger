@@ -108,6 +108,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       deliveryStatus,
       productType,
       airplaneId,
+      airlineId,
       productWeight,
       priority,
       originAddress,
@@ -118,6 +119,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       sender,
       receiver,
       telpNumber,
+      shippingDate,
     } = body;
 
     const existingShipment = await db.query.shipments.findFirst({
@@ -239,6 +241,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     let updatedNotes = typeof notes === 'string' ? notes : existingShipment.notes || '';
+    updatedNotes = setNoteValue(updatedNotes, 'Shipping Date', shippingDate);
     updatedNotes = setNoteValue(updatedNotes, 'Sender', sender);
     updatedNotes = setNoteValue(updatedNotes, 'Receiver', receiver);
     updatedNotes = setNoteValue(updatedNotes, 'Tel', telpNumber);

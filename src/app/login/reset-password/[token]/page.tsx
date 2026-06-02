@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import { StyledWrapper } from '@/components/auth/authstyle';
 import Captcha from '@/components/auth/captcha';
+import { PageTitle } from '@/components/ui/page-title';
 
 export default function ResetPasswordPage() {
   const [isVerified, setIsVerified] = useState(false);
@@ -70,6 +71,7 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4">
+      <PageTitle title="Reset Password" />
       <StyledWrapper>
         <div className="auth-card relative">
           <button

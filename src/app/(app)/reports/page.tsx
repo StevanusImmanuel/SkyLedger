@@ -6,6 +6,7 @@ import { useDebounce } from '@/lib/hooks/useDebounce';
 import { Pagination } from '@/components/ui/Pagination';
 import { TableSkeleton, StatCardSkeleton } from '@/components/ui/skeletons';
 import { exportToCSV, exportToPDF } from '@/lib/utils/export';
+import { PageTitle } from '@/components/ui/page-title';
 
 type Shipment = {
   id: string;
@@ -143,6 +144,7 @@ function ReportsContent() {
 
   return (
     <div>
+      <PageTitle title="Reports" />
       {/* Header */}
       <div className="sl-page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>

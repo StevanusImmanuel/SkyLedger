@@ -7,6 +7,7 @@ import PricingCard from "@/components/ui/pricingcard";
 import ArchitecturalEdge from "@/components/landingpages/architecturaledge";
 import Footer from "@/components/landingpages/footer";
 import { BlurText } from "@/components/ui/dynamicanimationfonts";
+import { PageTitle } from '@/components/ui/page-title';
 
 const pricingData = [
   {
@@ -55,6 +56,7 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
+      <PageTitle title="Pricing" />
       {/* Hero Section */}
       <section className="pt-40 pb-20 px-10">
         <div className="max-w-7xl mx-auto text-center mb-20 flex flex-col items-center">

@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { PageTitle } from '@/components/ui/page-title';
 
 export default function SettingsPage() {
   const [mounted, setMounted] = useState(false);
@@ -14,6 +15,7 @@ export default function SettingsPage() {
 
   return (
     <div>
+      <PageTitle title="Settings" />
       {/* Page Header */}
       <div style={{ marginBottom: 8 }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>

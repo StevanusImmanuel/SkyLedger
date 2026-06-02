@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Calendar, Search, Filter, RefreshCw, Download, User, Activity } from 'lucide-react';
 import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
+import { PageTitle } from '@/components/ui/page-title';
 
 interface ActivityLog {
   id: string;
@@ -172,6 +173,7 @@ export default function ActivityLogsPage() {
 
   return (
     <div style={{ padding: '24px 28px' }}>
+      <PageTitle title="Activity Logs" />
       {/* Header */}
       <div className="sl-page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
         <div>

@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
-import Nav from "@/components/landingpages/nav"; 
+import Nav from "@/components/landingpages/nav";
 import Loader from "@/components/ui/loader";
 import AnimatedButton from '@/components/ui/animbutton';
 import Footer from '@/components/landingpages/footer';
 import { BlurText } from '@/components/ui/dynamicanimationfonts';
+import { PageTitle } from '@/components/ui/page-title';
 
 export default function LandingPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -31,6 +32,7 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen bg-white">
+      <PageTitle title="Tracking" />
       <Nav />
 
       {/* Hero Header */}

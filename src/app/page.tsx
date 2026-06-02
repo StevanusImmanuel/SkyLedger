@@ -9,6 +9,7 @@ import Capabilities from "@/components/capabilities";
 import CTA from "@/components/landingpages/cta";
 import Footer from "@/components/landingpages/footer";
 import Contact from "@/components/landingpages/contact";
+import { PageTitle } from "@/components/ui/page-title";
 
 export default function LandingPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -23,6 +24,7 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen bg-white font-sans selection:bg-blue-100 overflow-x-hidden">
+      <PageTitle title="Home" />
       <Nav />
 
       {isLoading ? (

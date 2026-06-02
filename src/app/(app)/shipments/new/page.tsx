@@ -20,6 +20,7 @@ import {
   calculateShippingFeeFromInput,
   formatShippingFee,
 } from "@/lib/shipments/shipping-fee";
+import { PageTitle } from "@/components/ui/page-title";
 
 type Airline = {
   airlineId: number;
@@ -88,7 +89,6 @@ export default function NewShipmentPage() {
   const [selectedAirplane, setSelectedAirplane] = useState<number | null>(null);
   const [awbNumber, setAwbNumber] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [phoneError, setPhoneError] = useState("");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -205,6 +205,8 @@ export default function NewShipmentPage() {
 
     if (!formData.telpNumber.trim()) {
       newErrors.telpNumber = "Telephone number is required";
+    } else if (!/^\d+$/.test(formData.telpNumber)) {
+      newErrors.telpNumber = "Phone number must contain only digits";
     } else if (formData.telpNumber.length < 10 || formData.telpNumber.length > 13) {
       newErrors.telpNumber = "Phone number must be between 10 and 13 digits";
     }
@@ -215,6 +217,10 @@ export default function NewShipmentPage() {
 
     if (!formData.destIata) {
       newErrors.destIata = "Destination airport is required";
+    }
+
+    if (formData.originIata && formData.destIata && formData.originIata === formData.destIata) {
+      newErrors.destIata = "Destination airport must be different from origin airport";
     }
 
     if (!formData.originAddress.trim()) {
@@ -231,6 +237,8 @@ export default function NewShipmentPage() {
 
     if (!formData.productWeight || Number(formData.productWeight) <= 0) {
       newErrors.productWeight = "Product weight must be greater than 0";
+    } else if (isNaN(Number(formData.productWeight))) {
+      newErrors.productWeight = "Product weight must be a valid number";
     }
 
     if (!formData.deliveryType) {
@@ -309,42 +317,32 @@ export default function NewShipmentPage() {
   };
 
   const handleInputChange = (field: string, value: string) => {
-  // Clear error for this field when user starts typing
-  if (errors[field]) {
-    setErrors(prev => {
-      const newErrors = { ...prev };
-      delete newErrors[field];
-      return newErrors;
-    });
-  }
-
-  if (field === "telpNumber") {
-
-    // Jika user mengetik huruf
-    if (/[^0-9]/.test(value)) {
-      setPhoneError("Phone number must contain digits only.");
-    } else if (value.length > 0 && (value.length < 10 || value.length > 13)) {
-      setPhoneError("Phone number must be between 10 and 13 digits.");
-    } else {
-      setPhoneError("");
+    // Clear error for this field when user starts typing
+    if (errors[field]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
     }
 
-    // Hanya simpan angka
-    const onlyNumbers = value.replace(/\D/g, "").slice(0, 13);
+    if (field === "telpNumber") {
+      // Only accept digits and limit to 13 characters
+      const onlyNumbers = value.replace(/\D/g, "").slice(0, 13);
+
+      setFormData(prev => ({
+        ...prev,
+        [field]: onlyNumbers,
+      }));
+
+      return;
+    }
 
     setFormData(prev => ({
       ...prev,
-      [field]: onlyNumbers,
+      [field]: value,
     }));
-
-    return;
-  }
-
-  setFormData(prev => ({
-    ...prev,
-    [field]: value,
-  }));
-};
+  };
 
   // Shared classes for uniformity and readability
   const heavyInput = "w-full bg-[#e9ecef] border-2 border-transparent py-5 px-5 rounded-lg font-mono text-2xl text-slate-900 font-bold focus:ring-0 focus:border-[#00236f] transition-all placeholder:text-slate-400 outline-none";
@@ -353,6 +351,7 @@ export default function NewShipmentPage() {
 
   return (
     <div className="p-10 max-w-6xl mx-auto w-full animate-in fade-in duration-500">
+      <PageTitle title="New Shipment" />
       {/* Page Header */}
       <div className="mb-10">
         <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#00236f] bg-blue-100 px-2 py-1 rounded">
@@ -390,7 +389,7 @@ export default function NewShipmentPage() {
                       });
                     }
                   }}
-                  required
+                  
                 >
                   <option value="">Select Airline</option>
                   {airlines.map((airline) => (
@@ -421,7 +420,7 @@ export default function NewShipmentPage() {
                     }
                   }}
                   disabled={!selectedAirline}
-                  required
+                  
                 >
                   <option value="">Select Airplane</option>
                   {airplanes.map((airplane) => (
@@ -457,7 +456,6 @@ export default function NewShipmentPage() {
                 className={`${standardInput} ${errors.shippingDate ? 'border-red-500' : ''}`}
                 value={formData.shippingDate}
                 onChange={(e) => handleInputChange('shippingDate', e.target.value)}
-                required
               />
               <FormError message={errors.shippingDate || ""} />
             </div>
@@ -480,7 +478,7 @@ export default function NewShipmentPage() {
                  className={`${standardInput} ${errors.sender ? 'border-red-500' : ''}`}
                  value={formData.sender}
                  onChange={(e) => handleInputChange('sender', e.target.value)}
-                 required
+                 
               />
               <FormError message={errors.sender || ""} />
             </div>
@@ -493,7 +491,7 @@ export default function NewShipmentPage() {
                  className={`${standardInput} ${errors.receiver ? 'border-red-500' : ''}`}
                  value={formData.receiver}
                  onChange={(e) => handleInputChange('receiver', e.target.value)}
-                 required
+                 
                />
               <FormError message={errors.receiver || ""} />
             </div>
@@ -506,11 +504,10 @@ export default function NewShipmentPage() {
     type="tel"
     placeholder="Enter your phone number"
     className={`${standardInput} ${
-      phoneError || errors.telpNumber ? "border-red-500" : ""
+      errors.telpNumber ? "border-red-500" : ""
     }`}
     value={formData.telpNumber}
     onChange={(e) => handleInputChange("telpNumber", e.target.value)}
-    required
   />
 
   <FontAwesomeIcon
@@ -519,7 +516,7 @@ export default function NewShipmentPage() {
   />
 </div>
 
-<FormError message={errors.telpNumber || phoneError} />
+<FormError message={errors.telpNumber || ""} />
               </div>
             </div>
           </div>
@@ -540,7 +537,7 @@ export default function NewShipmentPage() {
                   className={`${selectStyle} ${errors.originIata ? 'border-red-500' : ''}`}
                   value={formData.originIata}
                   onChange={(e) => handleInputChange('originIata', e.target.value)}
-                  required
+                  
                 >
                   <option value="">Select Origin</option>
                   {airports.map((airport) => (
@@ -561,7 +558,7 @@ export default function NewShipmentPage() {
                   className={`${selectStyle} ${errors.destIata ? 'border-red-500' : ''}`}
                   value={formData.destIata}
                   onChange={(e) => handleInputChange('destIata', e.target.value)}
-                  required
+                  
                 >
                   <option value="">Select Destination</option>
                   {airports.map((airport) => (
@@ -584,7 +581,7 @@ export default function NewShipmentPage() {
                   className={`${standardInput} ${errors.originAddress ? 'border-red-500' : ''}`}
                   value={formData.originAddress}
                   onChange={(e) => handleInputChange('originAddress', e.target.value)}
-                  required
+                  
                 />
                 <FontAwesomeIcon icon={faMapMarkerAlt} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               </div>
@@ -600,7 +597,7 @@ export default function NewShipmentPage() {
                   className={`${standardInput} ${errors.destinationAddress ? 'border-red-500' : ''}`}
                   value={formData.destinationAddress}
                   onChange={(e) => handleInputChange('destinationAddress', e.target.value)}
-                  required
+                  
                 />
                 <FontAwesomeIcon icon={faMapMarkerAlt} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               </div>
@@ -614,7 +611,7 @@ export default function NewShipmentPage() {
                   className={selectStyle}
                   value={formData.priority}
                   onChange={(e) => handleInputChange('priority', e.target.value)}
-                  required
+                  
                 >
                   <option value="standard">Standard</option>
                   <option value="express">Express</option>
@@ -641,7 +638,7 @@ export default function NewShipmentPage() {
                   className={`${selectStyle} ${errors.productType ? 'border-red-500' : ''}`}
                   value={formData.productType}
                   onChange={(e) => handleInputChange('productType', e.target.value)}
-                  required
+                  
                 >
                   <option value="">Select Product Type</option>
                   {PRODUCT_TYPES.map((type) => (
@@ -661,11 +658,10 @@ export default function NewShipmentPage() {
                 type="number"
                 step="0.001"
                 min="0"
-                placeholder="Enter Product Weight"
+                placeholder="Enter Product Weight (must be a number)"
                 className={`${standardInput} ${errors.productWeight ? 'border-red-500' : ''}`}
                 value={formData.productWeight}
                 onChange={(e) => handleInputChange('productWeight', e.target.value)}
-                required
               />
               <FormError message={errors.productWeight || ""} />
             </div>
@@ -677,7 +673,7 @@ export default function NewShipmentPage() {
                   className={selectStyle}
                   value={formData.weightUnit}
                   onChange={(e) => handleInputChange('weightUnit', e.target.value)}
-                  required
+                  
                 >
                   {WEIGHT_UNITS.map((unit) => (
                     <option key={unit} value={unit}>
@@ -696,7 +692,7 @@ export default function NewShipmentPage() {
                   className={`${selectStyle} ${errors.deliveryType ? 'border-red-500' : ''}`}
                   value={formData.deliveryType}
                   onChange={(e) => handleInputChange('deliveryType', e.target.value)}
-                  required
+                  
                 >
                   <option value="">Select Delivery Type</option>
                   {DELIVERY_TYPES.map((type) => (
@@ -718,7 +714,7 @@ export default function NewShipmentPage() {
                 className={standardInput}
                 value={shippingFeeDisplay}
                 readOnly
-                required
+                
               />
             </div>
 
@@ -729,7 +725,6 @@ export default function NewShipmentPage() {
                   className={selectStyle}
                   value={formData.deliveryStatus}
                   onChange={(e) => handleInputChange('deliveryStatus', e.target.value)}
-                  required
                 >
                   {DELIVERY_STATUSES.map((status) => (
                     <option key={status} value={status}>

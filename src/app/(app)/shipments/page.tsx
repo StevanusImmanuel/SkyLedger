@@ -9,6 +9,7 @@ import { MenuItem, MenuContainer } from '@/components/ui/fluid-menu';
 import { MoreVertical, Eye, Edit, Trash2, X } from 'lucide-react';
 import { useNotifications } from '@/components/ui/notification-provider';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
+import { PageTitle } from '@/components/ui/page-title';
 
 type Shipment = {
   id: string;
@@ -248,6 +249,7 @@ function ShipmentsContent() {
 
   return (
     <div>
+      <PageTitle title="Shipments" />
       {/* Search + Flight Status Nav */}
       <div className="sl-shipment-nav">
         <div className="sl-awb-search">

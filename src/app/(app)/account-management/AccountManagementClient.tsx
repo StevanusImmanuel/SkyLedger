@@ -5,6 +5,8 @@ import { Edit, MoreVertical, Power, Plus, X, Trash2 } from 'lucide-react';
 import { MenuContainer, MenuItem } from '@/components/ui/fluid-menu';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { useNotifications } from '@/components/ui/notification-provider';
+import { PageTitle } from '@/components/ui/page-title';
+import { FormError } from '@/components/ui/form-error';
 
 type UserRole = 'admin' | 'operator' | 'viewer';
 
@@ -69,6 +71,7 @@ export default function AccountManagementClient() {
   const [showEditConfirmModal, setShowEditConfirmModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [userToDeactivate, setUserToDeactivate] = useState<ManagedUser | null>(null);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const { addNotification } = useNotifications();
 
   async function fetchUsers() {
@@ -259,6 +262,7 @@ export default function AccountManagementClient() {
 
   return (
     <div>
+      <PageTitle title="Account Management" />
       <div className="sl-page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
           <h1 className="sl-page-title">Account Management</h1>
@@ -479,11 +483,15 @@ export default function AccountManagementClient() {
                 <span className="sl-filter-label">Name</span>
                 <input
                   value={form.name}
-                  onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))}
-                  required
-                  minLength={2}
-                  className={accountFieldClassName}
+                  onChange={(event) => {
+                    setForm((value) => ({ ...value, name: event.target.value }));
+                    if (formErrors.name) {
+                      setFormErrors(prev => ({ ...prev, name: '' }));
+                    }
+                  }}
+                  className={`${accountFieldClassName} ${formErrors.name ? 'border-red-500' : ''}`}
                 />
+                <FormError message={formErrors.name || ""} />
               </label>
 
               <label>
@@ -491,10 +499,15 @@ export default function AccountManagementClient() {
                 <input
                   type="email"
                   value={form.email}
-                  onChange={(event) => setForm((value) => ({ ...value, email: event.target.value }))}
-                  required
-                  className={accountFieldClassName}
+                  onChange={(event) => {
+                    setForm((value) => ({ ...value, email: event.target.value }));
+                    if (formErrors.email) {
+                      setFormErrors(prev => ({ ...prev, email: '' }));
+                    }
+                  }}
+                  className={`${accountFieldClassName} ${formErrors.email ? 'border-red-500' : ''}`}
                 />
+                <FormError message={formErrors.email || ""} />
               </label>
 
               <label>
@@ -502,11 +515,16 @@ export default function AccountManagementClient() {
                 <input
                   type="password"
                   value={form.password}
-                  onChange={(event) => setForm((value) => ({ ...value, password: event.target.value }))}
-                  required={!editingUser}
+                  onChange={(event) => {
+                    setForm((value) => ({ ...value, password: event.target.value }));
+                    if (formErrors.password) {
+                      setFormErrors(prev => ({ ...prev, password: '' }));
+                    }
+                  }}
                   placeholder={editingUser ? 'Leave blank to keep current password' : 'Min. 8 chars, uppercase, number'}
-                  className={accountFieldClassName}
+                  className={`${accountFieldClassName} ${formErrors.password ? 'border-red-500' : ''}`}
                 />
+                <FormError message={formErrors.password || ""} />
               </label>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
