@@ -55,15 +55,8 @@ function DashboardContent() {
       }
     }
 
-    // Initial fetch
+    // Initial fetch only - no auto-refresh
     fetchDashboard();
-
-    // Poll every 30 seconds to keep data fresh
-    const interval = setInterval(() => {
-      fetchDashboard();
-    }, 30000);
-
-    return () => clearInterval(interval);
   }, []);
 
   if (!data && !isLoading) {
