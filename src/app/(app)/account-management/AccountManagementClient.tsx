@@ -7,6 +7,7 @@ import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { useNotifications } from '@/components/ui/notification-provider';
 import { PageTitle } from '@/components/ui/page-title';
 import { FormError } from '@/components/ui/form-error';
+import { apiFetch } from '@/lib/api-client';
 
 type UserRole = 'admin' | 'operator' | 'viewer';
 
@@ -80,8 +81,8 @@ export default function AccountManagementClient() {
 
     try {
       const [usersResponse, meResponse] = await Promise.all([
-        fetch('/api/users'),
-        fetch('/api/users?me=true'),
+        apiFetch('/api/users'),
+        apiFetch('/api/users?me=true'),
       ]);
       const usersJson = await usersResponse.json();
       const meJson = await meResponse.json();
@@ -96,8 +97,8 @@ export default function AccountManagementClient() {
       }
 
       setUsers(usersJson.data);
-    } catch {
-      setError('Failed to load users');
+    } catch (error: any) {
+      setError(error.message || 'Failed to load users');
     } finally {
       setIsLoading(false);
     }
@@ -131,14 +132,51 @@ export default function AccountManagementClient() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setFormErrors({});
+
+    const newErrors: Record<string, string> = {};
+
+    if (!form.name.trim()) {
+      newErrors.name = 'Name is required';
+    } else if (form.name.trim().length < 2) {
+      newErrors.name = 'Name must be at least 2 characters';
+    }
 
     if (!form.email.trim()) {
-      setError('Email is required');
-      return;
+      newErrors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      newErrors.email = 'Invalid email address';
     }
 
     if (!editingUser && !form.password) {
-      setError('Password is required');
+      newErrors.password = 'Password is required';
+    } else if (form.password) {
+      if (form.password.length < 8) {
+        newErrors.password = 'Password must be at least 8 characters';
+      } else if (!/[A-Z]/.test(form.password)) {
+        newErrors.password = 'Must contain at least one uppercase letter';
+      } else if (!/[0-9]/.test(form.password)) {
+        newErrors.password = 'Must contain at least one number';
+      }
+    }
+
+    if (!form.role) {
+      newErrors.role = 'Role is required';
+    }
+
+    // Role protection blocks
+    if (editingUser && editingUser.id === currentUser?.id && form.role !== 'admin') {
+      newErrors.role = 'You cannot demote yourself from Admin';
+    }
+
+    // Status protection blocks
+    if (editingUser && editingUser.id === currentUser?.id && !form.isActive) {
+      newErrors.isActive = 'You cannot deactivate your own account';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setFormErrors(newErrors);
+      setError('Please fix validation errors');
       return;
     }
 
@@ -165,7 +203,7 @@ export default function AccountManagementClient() {
         isActive: form.isActive,
       };
 
-      const response = await fetch(editingUser ? `/api/users?id=${editingUser.id}` : '/api/users', {
+      const response = await apiFetch(editingUser ? `/api/users?id=${editingUser.id}` : '/api/users', {
         method: editingUser ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingUser && !form.password ? { ...payload, password: undefined } : payload),
@@ -173,7 +211,16 @@ export default function AccountManagementClient() {
       const json = await response.json();
 
       if (!response.ok || !json.success) {
-        setError(getApiMessage(json, 'Failed to save user'));
+        const servErr = getApiMessage(json, 'Failed to save user');
+        setError(servErr);
+        // Map common errors back to fields
+        if (servErr.toLowerCase().includes('email')) {
+          setFormErrors(prev => ({ ...prev, email: servErr }));
+        } else if (servErr.toLowerCase().includes('password')) {
+          setFormErrors(prev => ({ ...prev, password: servErr }));
+        } else if (servErr.toLowerCase().includes('admin') || servErr.toLowerCase().includes('role')) {
+          setFormErrors(prev => ({ ...prev, role: servErr }));
+        }
         return;
       }
 
@@ -183,8 +230,8 @@ export default function AccountManagementClient() {
       });
       setIsModalOpen(false);
       await fetchUsers();
-    } catch {
-      setError('Failed to save user');
+    } catch (error: any) {
+      setError(error.message || 'Failed to save user');
     } finally {
       setIsSaving(false);
     }
@@ -202,7 +249,7 @@ export default function AccountManagementClient() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/users?id=${userToDeactivate.id}`, { method: 'DELETE' });
+      const response = await apiFetch(`/api/users?id=${userToDeactivate.id}`, { method: 'DELETE' });
       const json = await response.json();
 
       if (!response.ok || !json.success) {
@@ -217,8 +264,8 @@ export default function AccountManagementClient() {
       setShowDeactivateModal(false);
       setUserToDeactivate(null);
       await fetchUsers();
-    } catch {
-      setError('Failed to deactivate user');
+    } catch (error: any) {
+      setError(error.message || 'Failed to deactivate user');
     } finally {
       setIsSaving(false);
     }
@@ -236,7 +283,7 @@ export default function AccountManagementClient() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/users?id=${userToDelete.id}&permanent=true`, {
+      const response = await apiFetch(`/api/users?id=${userToDelete.id}&permanent=true`, {
         method: 'DELETE'
       });
       const json = await response.json();
@@ -253,8 +300,8 @@ export default function AccountManagementClient() {
       setShowDeleteModal(false);
       setUserToDelete(null);
       await fetchUsers();
-    } catch {
-      setError('Failed to delete user');
+    } catch (error: any) {
+      setError(error.message || 'Failed to delete user');
     } finally {
       setIsSaving(false);
     }
@@ -428,6 +475,7 @@ export default function AccountManagementClient() {
         >
           <form
             onSubmit={handleSubmit}
+            noValidate
             role="dialog"
             aria-modal="true"
             aria-labelledby="account-form-title"
@@ -532,25 +580,33 @@ export default function AccountManagementClient() {
                   <span className="sl-filter-label">Role</span>
                   <select
                     value={form.role}
-                    onChange={(event) => setForm((value) => ({ ...value, role: event.target.value as UserRole }))}
+                    onChange={(event) => {
+                      setForm((value) => ({ ...value, role: event.target.value as UserRole }));
+                      if (formErrors.role) setFormErrors(prev => ({ ...prev, role: '' }));
+                    }}
                     className={accountSelectClassName}
                   >
                     <option value="admin">Admin</option>
                     <option value="operator">Operator</option>
                     <option value="viewer">Viewer</option>
                   </select>
+                  <FormError message={formErrors.role || ""} />
                 </label>
 
                 <label>
                   <span className="sl-filter-label">Status</span>
                   <select
                     value={form.isActive ? 'active' : 'inactive'}
-                    onChange={(event) => setForm((value) => ({ ...value, isActive: event.target.value === 'active' }))}
+                    onChange={(event) => {
+                      setForm((value) => ({ ...value, isActive: event.target.value === 'active' }));
+                      if (formErrors.isActive) setFormErrors(prev => ({ ...prev, isActive: '' }));
+                    }}
                     className={accountSelectClassName}
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>
+                  <FormError message={formErrors.isActive || ""} />
                 </label>
               </div>
 
@@ -558,9 +614,13 @@ export default function AccountManagementClient() {
                 <span className="sl-filter-label">Department</span>
                 <input
                   value={form.department}
-                  onChange={(event) => setForm((value) => ({ ...value, department: event.target.value }))}
+                  onChange={(event) => {
+                    setForm((value) => ({ ...value, department: event.target.value }));
+                    if (formErrors.department) setFormErrors(prev => ({ ...prev, department: '' }));
+                  }}
                   className={accountFieldClassName}
                 />
+                <FormError message={formErrors.department || ""} />
               </label>
             </div>
 

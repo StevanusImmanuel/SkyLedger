@@ -120,6 +120,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       receiver,
       telpNumber,
       shippingDate,
+      originalUpdatedAt,
     } = body;
 
     const existingShipment = await db.query.shipments.findFirst({
@@ -128,10 +129,22 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         priority: true,
         weightKg: true,
         notes: true,
+        updatedAt: true,
       },
     });
 
-    if (!existingShipment) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!existingShipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
+
+    // Check for concurrent update conflict
+    if (originalUpdatedAt) {
+      const dbTime = new Date(existingShipment.updatedAt).getTime();
+      const clientTime = new Date(originalUpdatedAt).getTime();
+      if (Math.abs(dbTime - clientTime) > 1000) {
+        return NextResponse.json({
+          error: 'Concurrent update conflict: This shipment has been modified by another operator. Please reload and try again.'
+        }, { status: 409 });
+      }
+    }
 
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     const nextPriority = priority ?? existingShipment.priority;
@@ -316,22 +329,24 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       columns: { awbNumber: true },
     });
 
+    if (!shipment) {
+      return NextResponse.json({ error: 'Shipment not found or already deleted' }, { status: 404 });
+    }
+
     // Hard delete - cascade will delete related shipment_events
     await db.delete(shipments).where(eq(shipments.id, id));
 
     // Log shipment deletion activity
-    if (shipment) {
-      await logActivity({
-        userId: user.id,
-        userName: user.name,
-        userRole: user.role,
-        action: 'delete',
-        entityType: 'shipment',
-        entityId: id,
-        details: { awbNumber: shipment.awbNumber },
-        request,
-      });
-    }
+    await logActivity({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      action: 'delete',
+      entityType: 'shipment',
+      entityId: id,
+      details: { awbNumber: shipment.awbNumber },
+      request,
+    });
 
     return NextResponse.json({ success: true, message: 'Shipment deleted successfully' });
   } catch (error) {

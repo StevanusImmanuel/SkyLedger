@@ -10,6 +10,7 @@ import { MoreVertical, Eye, Edit, Trash2, X } from 'lucide-react';
 import { useNotifications } from '@/components/ui/notification-provider';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { PageTitle } from '@/components/ui/page-title';
+import { apiFetch } from '@/lib/api-client';
 
 type Shipment = {
   id: string;
@@ -123,6 +124,8 @@ function ShipmentsContent() {
   const debouncedSearch = useDebounce(search, 800);
   const router = useRouter();
   const { addNotification } = useNotifications();
+  const [error, setError] = useState<string | null>(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
 
   const handleDelete = async (shipmentId: string) => {
     setShipmentToDelete(shipmentId);
@@ -135,7 +138,7 @@ function ShipmentsContent() {
     setIsDeleting(true);
 
     try {
-      const res = await fetch(`/api/shipments/${shipmentToDelete}`, {
+      const res = await apiFetch(`/api/shipments/${shipmentToDelete}`, {
         method: 'DELETE',
       });
 
@@ -150,7 +153,7 @@ function ShipmentsContent() {
           description: 'The shipment has been removed from the system.',
         });
         // Refresh the shipments list
-        window.location.reload();
+        setRetryTrigger(prev => prev + 1);
       } else {
         addNotification({
           variant: 'destructive',
@@ -158,12 +161,12 @@ function ShipmentsContent() {
           description: data.error || 'An error occurred while deleting the shipment.',
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to delete shipment:', error);
       addNotification({
         variant: 'destructive',
         title: 'Failed to delete shipment',
-        description: 'An unexpected error occurred. Please try again.',
+        description: error.message || 'An unexpected error occurred. Please try again.',
       });
     } finally {
       setIsDeleting(false);
@@ -173,6 +176,7 @@ function ShipmentsContent() {
   useEffect(() => {
     async function fetchShipments() {
       setIsLoading(true);
+      setError(null);
       try {
         const offset = (currentPage - 1) * itemsPerPage;
         const params = new URLSearchParams({
@@ -182,7 +186,7 @@ function ShipmentsContent() {
         if (debouncedSearch) {
           params.set('search', debouncedSearch);
         }
-        const res = await fetch(`/api/shipments?${params}`);
+        const res = await apiFetch(`/api/shipments?${params}`);
         const json = await res.json();
         console.log('Shipments API response:', json);
         if (json.success) {
@@ -190,7 +194,7 @@ function ShipmentsContent() {
           setTotal(json.total);
 
           // Calculate stats from all shipments (not just current page)
-          const allShipmentsRes = await fetch('/api/shipments?limit=1000');
+          const allShipmentsRes = await apiFetch('/api/shipments?limit=1000');
           const allShipmentsJson = await allShipmentsRes.json();
 
           if (allShipmentsJson.success) {
@@ -227,16 +231,18 @@ function ShipmentsContent() {
             });
           }
         } else {
+          setError(json.error || 'Failed to fetch shipments');
           console.error('Shipments API error:', json.error);
         }
-      } catch (err) {
+      } catch (err: any) {
+        setError(err.message || 'Failed to fetch shipments');
         console.error('Failed to fetch shipments:', err);
       } finally {
         setIsLoading(false);
       }
     }
     fetchShipments();
-  }, [currentPage, debouncedSearch]);
+  }, [currentPage, debouncedSearch, retryTrigger]);
 
   const totalPages = Math.ceil(total / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -311,7 +317,43 @@ function ShipmentsContent() {
       )}
 
       {/* Shipments Table */}
-      {isLoading ? (
+      {error ? (
+        <div style={{
+          background: '#fff',
+          border: '1px solid #fee2e2',
+          borderRadius: 12,
+          padding: 32,
+          textAlign: 'center',
+          marginBottom: 20
+        }}>
+          <div style={{ color: '#b91c1c', fontWeight: 800, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+            Manifest Load Error
+          </div>
+          <div style={{ color: '#475569', fontSize: 12.5, fontWeight: 600, marginBottom: 16 }}>
+            {error}
+          </div>
+          <button
+            onClick={() => setRetryTrigger(prev => prev + 1)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#1a2d5a',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '10px 24px',
+              fontSize: 12.5,
+              fontWeight: 800,
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}
+          >
+            Retry Loading
+          </button>
+        </div>
+      ) : isLoading ? (
         <ShipmentTableSkeleton rows={6} />
       ) : (
         <div className="sl-awb-table-container" style={{ overflowX: 'auto' }}>

@@ -11,6 +11,7 @@ import {
   formatShippingFee,
 } from "@/lib/shipments/shipping-fee";
 import { PageTitle } from "@/components/ui/page-title";
+import { apiFetch } from "@/lib/api-client";
 
 const ShipmentRouteMap = dynamic(
   () => import("@/components/shipments/ShipmentRouteMap"),
@@ -187,16 +188,10 @@ export default function ShipmentDetailPage() {
       setError("");
 
       try {
-        const res = await fetch(`/api/shipments/${encodeURIComponent(shipmentId)}`);
+        const res = await apiFetch(`/api/shipments/${encodeURIComponent(shipmentId)}`);
         const data = await res.json();
 
         if (!isMounted) return;
-
-        if (res.status === 404) {
-          setShipment(null);
-          setError("Shipment not found.");
-          return;
-        }
 
         if (!res.ok || !data.success) {
           setShipment(null);
@@ -205,11 +200,11 @@ export default function ShipmentDetailPage() {
         }
 
         setShipment(data.data);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to fetch shipment detail:", err);
         if (isMounted) {
           setShipment(null);
-          setError("Unable to load shipment details.");
+          setError(err.message || "Unable to load shipment details.");
         }
       } finally {
         if (isMounted) setIsLoading(false);

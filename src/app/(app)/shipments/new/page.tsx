@@ -21,6 +21,7 @@ import {
   formatShippingFee,
 } from "@/lib/shipments/shipping-fee";
 import { PageTitle } from "@/components/ui/page-title";
+import { apiFetch } from "@/lib/api-client";
 
 type Airline = {
   airlineId: number;
@@ -272,7 +273,7 @@ export default function NewShipmentPage() {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/shipments', {
+      const res = await apiFetch('/api/shipments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -304,12 +305,12 @@ export default function NewShipmentPage() {
           description: data.error || 'An error occurred while creating the shipment.',
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create shipment:', error);
       addNotification({
         variant: 'destructive',
         title: 'Failed to create shipment',
-        description: 'An unexpected error occurred. Please try again.',
+        description: error.message || 'An unexpected error occurred. Please try again.',
       });
     } finally {
       setIsSubmitting(false);
@@ -363,7 +364,7 @@ export default function NewShipmentPage() {
         </p>
       </div>
 
-      <form className="space-y-8" onSubmit={handleSubmit}>
+      <form className="space-y-8" onSubmit={handleSubmit} noValidate>
 
         {/* Section 1: Identification */}
         <div className="bg-[#f2f4f6] rounded-xl p-8 border-l-[6px] border-[#00236f]">

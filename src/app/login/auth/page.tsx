@@ -6,11 +6,13 @@ import { useRouter } from 'next/navigation';
 import { StyledWrapper } from '@/components/auth/authstyle';
 import Captcha from '@/components/auth/captcha';
 import { PageTitle } from '@/components/ui/page-title';
+import { FormError } from '@/components/ui/form-error';
 
 export default function LoginPage() {
   const [isVerified, setIsVerified] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
@@ -19,11 +21,31 @@ export default function LoginPage() {
     if (!isVerified) return;
 
     setError('');
+    setErrors({});
     setIsLoading(true);
 
     const formData = new FormData(e.target as HTMLFormElement);
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
+
+    const formErrors: Record<string, string> = {};
+    if (!email) {
+      formErrors.email = 'Email address is required';
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      formErrors.email = 'Invalid email address';
+    }
+
+    if (!password) {
+      formErrors.password = 'Password is required';
+    } else if (password.length < 8) {
+      formErrors.password = 'Password must be at least 8 characters';
+    }
+
+    if (Object.keys(formErrors).length > 0) {
+      setErrors(formErrors);
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch('/api/auth?action=login', {
@@ -35,7 +57,13 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Login failed');
+        const servErr = data.error || 'Login failed';
+        setError(servErr);
+        if (servErr.toLowerCase().includes('email')) {
+          setErrors(prev => ({ ...prev, email: servErr }));
+        } else if (servErr.toLowerCase().includes('password') || servErr.toLowerCase().includes('credential')) {
+          setErrors(prev => ({ ...prev, password: servErr }));
+        }
         setIsLoading(false);
         return;
       }
@@ -60,7 +88,7 @@ export default function LoginPage() {
             ← BACK
           </button>
 
-          <form onSubmit={handleLogin}>
+          <form onSubmit={handleLogin} noValidate>
             <div className="title-section text-center">
               <div className="flex justify-center mb-4">
                 <Image 
@@ -96,7 +124,10 @@ export default function LoginPage() {
               {/* User ID Field */}
               <div>
                 <label className="label-text">Email Address</label>
-                <div className="input-form">
+                <div 
+                  className={`input-form ${errors.email ? 'border-red-500' : ''}`}
+                  style={errors.email ? { borderColor: '#ef4444' } : {}}
+                >
                   <svg className="opacity-40" height={18} viewBox="0 0 24 24" fill="none" stroke="#1a2d5a" strokeWidth="2.5">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
                   </svg>
@@ -105,10 +136,15 @@ export default function LoginPage() {
                     name="email"
                     className="input-field"
                     placeholder="e.g. admin@skyledger.com"
-                    required
                     disabled={isLoading}
+                    onChange={() => {
+                      if (errors.email) {
+                        setErrors(prev => ({ ...prev, email: '' }));
+                      }
+                    }}
                   />
                 </div>
+                <FormError message={errors.email || ''} />
               </div>
 
               {/* Password Field with Toggle */}
@@ -117,7 +153,10 @@ export default function LoginPage() {
                   <label className="label-text mb-0">Security Key</label>
                   <Link href="/login/forgot-password" className="text-[10px] text-[#60a5fa] font-black cursor-pointer hover:underline uppercase">Forgot Access?</Link>
                 </div>
-                <div className="input-form">
+                <div 
+                  className={`input-form ${errors.password ? 'border-red-500' : ''}`}
+                  style={errors.password ? { borderColor: '#ef4444' } : {}}
+                >
                   <svg className="opacity-40" height={18} viewBox="0 0 24 24" fill="none" stroke="#1a2d5a" strokeWidth="2.5">
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
@@ -126,8 +165,12 @@ export default function LoginPage() {
                     name="password"
                     className="input-field"
                     placeholder="••••••••••••"
-                    required
                     disabled={isLoading}
+                    onChange={() => {
+                      if (errors.password) {
+                        setErrors(prev => ({ ...prev, password: '' }));
+                      }
+                    }}
                   />
                   {/* Password Toggle Button */}
                   <button 
@@ -143,6 +186,7 @@ export default function LoginPage() {
                     )}
                   </button>
                 </div>
+                <FormError message={errors.password || ''} />
               </div>
             </div>
 

@@ -20,6 +20,7 @@ import {
 } from "@/lib/shipments/shipping-fee";
 import { PageTitle } from "@/components/ui/page-title";
 import { FormError } from "@/components/ui/form-error";
+import { apiFetch } from "@/lib/api-client";
 
 type Airline = {
   airlineId: number;
@@ -59,6 +60,7 @@ type Shipment = {
   weightKg: string;
   notes: string | null;
   createdAt: string;
+  updatedAt: string;
 
   // Menggunakan tipe any agar aman dari eror TypeScript linting
   sender_name?: any;
@@ -107,6 +109,7 @@ export default function EditShipmentPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [originalUpdatedAt, setOriginalUpdatedAt] = useState<string>("");
   
 
   // Form fields (State internal form aplikasi)
@@ -197,6 +200,7 @@ export default function EditShipmentPage() {
           if (shipment.flight?.airplane?.airplaneId) {
             setSelectedAirplane(shipment.flight.airplane.airplaneId);
           }
+          setOriginalUpdatedAt(shipment.updatedAt || "");
         }
       } catch (error) {
         console.error('Failed to fetch shipment:', error);
@@ -351,7 +355,7 @@ export default function EditShipmentPage() {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch(`/api/shipments/${shipmentId}`, {
+      const res = await apiFetch(`/api/shipments/${shipmentId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -359,6 +363,7 @@ export default function EditShipmentPage() {
           airplaneId: selectedAirplane,
           ...formData,
           shippingFee: shippingFeeDisplay,
+          originalUpdatedAt,
         }),
       });
 
@@ -383,12 +388,12 @@ export default function EditShipmentPage() {
           description: data.error || 'An error occurred while updating the shipment.',
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to update shipment:', error);
       addNotification({
         variant: 'destructive',
         title: 'Failed to update shipment',
-        description: 'An unexpected error occurred. Please try again.',
+        description: error.message || 'An unexpected error occurred. Please try again.',
       });
     } finally {
       setIsSubmitting(false);
@@ -445,7 +450,7 @@ export default function EditShipmentPage() {
         </p>
       </div>
 
-      <form className="space-y-8" onSubmit={handleSubmit}>
+      <form className="space-y-8" onSubmit={handleSubmit} noValidate>
 
         {/* Section 1: Flight Information */}
         <div className="bg-[#f2f4f6] rounded-xl p-8 border-l-[6px] border-[#00236f]">

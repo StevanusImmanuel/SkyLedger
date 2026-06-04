@@ -168,7 +168,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Extended validation for CRUDDB requirements
     const {
       airlineId,
       airplaneId,
@@ -188,7 +187,20 @@ export async function POST(request: NextRequest) {
       notes,
     } = body;
     const priority = body.priority || 'standard';
+
+    // Validate missing fields
+    if (!airlineId || !airplaneId || !shippingDate || !sender?.trim() || !receiver?.trim() || 
+        !telpNumber?.trim() || !originAddress?.trim() || !destinationAddress?.trim() || 
+        !originIata?.trim() || !destIata?.trim() || !productType?.trim() || 
+        productWeight === undefined || !deliveryType?.trim()) {
+      return NextResponse.json({ error: 'Missing required shipment fields' }, { status: 400 });
+    }
+
     const productWeightValue = Number(productWeight);
+    if (isNaN(productWeightValue) || productWeightValue <= 0) {
+      return NextResponse.json({ error: 'Product weight must be a positive number' }, { status: 400 });
+    }
+
     const shippingFee = calculateShippingFeeFromInput(productWeight, priority);
 
     if (!isShipmentPriority(priority)) {
@@ -205,7 +217,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!airline) {
-      return NextResponse.json({ error: 'Invalid airline' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid airline selection' }, { status: 400 });
     }
 
     // Get airports
@@ -213,6 +225,32 @@ export async function POST(request: NextRequest) {
       db.query.airports.findFirst({ where: eq(airports.iataCode, originIata) }),
       db.query.airports.findFirst({ where: eq(airports.iataCode, destIata) }),
     ]);
+
+    if (!originAirport) {
+      return NextResponse.json({ error: `Origin airport with code ${originIata} not found` }, { status: 400 });
+    }
+
+    if (!destAirport) {
+      return NextResponse.json({ error: `Destination airport with code ${destIata} not found` }, { status: 400 });
+    }
+
+    if (originIata.toUpperCase() === destIata.toUpperCase()) {
+      return NextResponse.json({ error: 'Destination airport must be different from origin airport' }, { status: 400 });
+    }
+
+    // Validate coordinates
+    const latOrigin = Number(originAirport.latitude);
+    const lonOrigin = Number(originAirport.longitude);
+    const latDest = Number(destAirport.latitude);
+    const lonDest = Number(destAirport.longitude);
+
+    if (isNaN(latOrigin) || isNaN(lonOrigin) || latOrigin < -90 || latOrigin > 90 || lonOrigin < -180 || lonOrigin > 180) {
+      return NextResponse.json({ error: `Origin airport (${originIata}) has invalid coordinates` }, { status: 400 });
+    }
+
+    if (isNaN(latDest) || isNaN(lonDest) || latDest < -90 || latDest > 90 || lonDest < -180 || lonDest > 180) {
+      return NextResponse.json({ error: `Destination airport (${destIata}) has invalid coordinates` }, { status: 400 });
+    }
 
     // Find or create a flight for the airplane
     let availableFlight = await db.query.flights.findFirst({
@@ -229,8 +267,8 @@ export async function POST(request: NextRequest) {
         .values({
           airlineId: airlineId,
           airplaneId: airplaneId,
-          originAirportId: originAirport?.id,
-          destAirportId: destAirport?.id,
+          originAirportId: originAirport.id,
+          destAirportId: destAirport.id,
           departureTime: shippingDate ? new Date(shippingDate) : new Date(),
           arrivalTime: shippingDate ? new Date(new Date(shippingDate).getTime() + 3 * 24 * 60 * 60 * 1000) : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
           status: 'scheduled',
@@ -239,8 +277,23 @@ export async function POST(request: NextRequest) {
       availableFlight = newFlight;
     }
 
-    // Generate AWB with airline code
-    const awbNumber = generateAwbNumber(airline.airlineCode);
+    // Generate and verify AWB uniqueness (avoid duplicate tracking numbers)
+    let awbNumber = '';
+    let isUnique = false;
+    for (let i = 0; i < 5; i++) {
+      awbNumber = generateAwbNumber(airline.airlineCode);
+      const existing = await db.query.shipments.findFirst({
+        where: eq(shipments.awbNumber, awbNumber),
+      });
+      if (!existing) {
+        isUnique = true;
+        break;
+      }
+    }
+
+    if (!isUnique) {
+      return NextResponse.json({ error: 'Failed to generate a unique Air Waybill tracking number. Please try again.' }, { status: 409 });
+    }
 
     type ShipmentStatus = NonNullable<typeof shipments.$inferInsert.status>;
     type DeliveryStatusEnum = NonNullable<typeof shipments.$inferInsert.deliveryStatus>;
@@ -270,8 +323,8 @@ export async function POST(request: NextRequest) {
       .values({
         awbNumber,
         flightId: availableFlight?.id,
-        originAirportId: originAirport?.id,
-        destAirportId: destAirport?.id,
+        originAirportId: originAirport.id,
+        destAirportId: destAirport.id,
         priority,
         productType,
         quantity: 1,
