@@ -67,7 +67,8 @@ const airportColorMap: Record<string, string> = {
   HKG: 'blue', LAX: 'purple',
 };
 
-const REPORT_DELIVERY_STATUS: NonNullable<Shipment['deliveryStatus']> = 'delivered';
+// Shipments statuses that count as delivered for the reports page:
+const DELIVERED_STATUSES = ['delivered', 'arrived_at_destination', 'out_for_delivery', 'ready_for_pickup'];
 
 function ReportsContent() {
   const [search, setSearch] = useState('');
@@ -77,6 +78,7 @@ function ReportsContent() {
   const [selectedAirport, setSelectedAirport] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all_delivered');
   const [stats, setStats] = useState({
     total: 0,
     inFlight: 0,
@@ -110,7 +112,7 @@ function ReportsContent() {
         const params = new URLSearchParams();
         if (debouncedSearch) params.set('search', debouncedSearch);
         if (selectedAirport !== 'all') params.set('airport', selectedAirport);
-        params.set('deliveryStatus', REPORT_DELIVERY_STATUS);
+        params.set('deliveryStatus', selectedStatus);
         if (dateFrom) params.set('dateFrom', dateFrom);
         if (dateTo) params.set('dateTo', dateTo);
         params.set('limit', '1000'); // Get all for reports
@@ -123,7 +125,9 @@ function ReportsContent() {
           // Calculate stats
           const total = json.data.length;
           const inFlight = 0;
-          const arrived = json.data.filter((s: Shipment) => s.deliveryStatus === REPORT_DELIVERY_STATUS).length;
+          const arrived = json.data.filter((s: Shipment) => 
+            DELIVERED_STATUSES.includes(s.deliveryStatus || '')
+          ).length;
 
           const totalWeight = json.data.reduce((sum: number, s: Shipment) => sum + Number(s.weightKg), 0);
 
@@ -131,12 +135,13 @@ function ReportsContent() {
         }
       } catch (err) {
         console.error('Failed to fetch shipments:', err);
-      } finally {
+      } // isLoading managed in finally
+      finally {
         setIsLoading(false);
       }
     }
     fetchShipments();
-  }, [debouncedSearch, selectedAirport, dateFrom, dateTo]);
+  }, [debouncedSearch, selectedAirport, dateFrom, dateTo, selectedStatus]);
 
   const paginatedShipments = getPaginatedData(shipments);
   const totalPages = getTotalPages(shipments.length);
@@ -264,12 +269,15 @@ function ReportsContent() {
           <span className="sl-filter-label">Status</span>
           <select
             className="sl-filter-sel"
-            value={REPORT_DELIVERY_STATUS}
-            disabled
-            aria-label="Report delivery status filter locked to delivered"
-            style={{ opacity: 0.75, cursor: 'not-allowed' }}
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            aria-label="Report delivery status filter"
           >
+            <option value="all_delivered">All Delivered Statuses</option>
             <option value="delivered">Delivered</option>
+            <option value="arrived_at_destination">Arrived at Destination</option>
+            <option value="out_for_delivery">Out for Delivery</option>
+            <option value="ready_for_pickup">Ready for Pickup</option>
           </select>
         </div>
         <div className="sl-report-export-btns">

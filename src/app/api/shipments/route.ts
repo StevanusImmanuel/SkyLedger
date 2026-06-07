@@ -7,7 +7,7 @@ import {
   formatShippingFee,
   isShipmentPriority,
 } from '@/lib/shipments/shipping-fee';
-import { eq, desc, and, or, ilike, count, gte, lte, SQL } from 'drizzle-orm';
+import { eq, desc, and, or, ilike, count, gte, lte, SQL, inArray } from 'drizzle-orm';
 import { logActivity } from '@/lib/activity-logger';
 
 async function getAuthUser(req: NextRequest) {
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = request.nextUrl;
     const statusFilter = searchParams.get('status') as typeof shipments.$inferSelect.status | null;
-    const deliveryStatusFilter = searchParams.get('deliveryStatus') as typeof shipments.$inferSelect.deliveryStatus | null;
+    const deliveryStatusFilter = searchParams.get('deliveryStatus');
     const search = searchParams.get('search') || '';
     const airport = searchParams.get('airport') || '';
     const dateFrom = searchParams.get('dateFrom') || '';
@@ -93,7 +93,21 @@ export async function GET(request: NextRequest) {
     }
 
     if (deliveryStatusFilter) {
-      conditions.push(eq(shipments.deliveryStatus, deliveryStatusFilter));
+      if (deliveryStatusFilter === 'all_delivered') {
+        conditions.push(
+          inArray(shipments.deliveryStatus, [
+            'delivered',
+            'arrived_at_destination',
+            'out_for_delivery',
+            'ready_for_pickup',
+          ])
+        );
+      } else if (deliveryStatusFilter.includes(',')) {
+        const statuses = deliveryStatusFilter.split(',') as any[];
+        conditions.push(inArray(shipments.deliveryStatus, statuses));
+      } else {
+        conditions.push(eq(shipments.deliveryStatus, deliveryStatusFilter as any));
+      }
     }
 
     // Search by AWB, Sender, Receiver (from notes field)
