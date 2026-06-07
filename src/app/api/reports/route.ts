@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { shipments } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
-import { gte, count, sum } from 'drizzle-orm';
+import { gte, count, sum, inArray, and } from 'drizzle-orm';
 import { logActivity } from '@/lib/activity-logger';
 
 async function getAuthUser(req: NextRequest) {
@@ -36,26 +36,46 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  const deliveredStatuses = ['delivered', 'arrived_at_destination', 'out_for_delivery', 'ready_for_pickup'];
+
   const [totals] = await db
     .select({ total: count(), totalWeight: sum(shipments.weightKg) })
     .from(shipments)
-    .where(gte(shipments.createdAt, since));
+    .where(
+      and(
+        gte(shipments.createdAt, since),
+        inArray(shipments.deliveryStatus, deliveredStatuses as any)
+      )
+    );
 
   const byStatus = await db
     .select({ status: shipments.status, count: count() })
     .from(shipments)
-    .where(gte(shipments.createdAt, since))
+    .where(
+      and(
+        gte(shipments.createdAt, since),
+        inArray(shipments.deliveryStatus, deliveredStatuses as any)
+      )
+    )
     .groupBy(shipments.status);
 
   const byPriority = await db
     .select({ priority: shipments.priority, count: count() })
     .from(shipments)
-    .where(gte(shipments.createdAt, since))
+    .where(
+      and(
+        gte(shipments.createdAt, since),
+        inArray(shipments.deliveryStatus, deliveredStatuses as any)
+      )
+    )
     .groupBy(shipments.priority);
 
   const recent = await db.query.shipments.findMany({
     with: { originAirport: true, destAirport: true, flight: true },
-    where: gte(shipments.createdAt, since),
+    where: and(
+      gte(shipments.createdAt, since),
+      inArray(shipments.deliveryStatus, deliveredStatuses as any)
+    ),
     orderBy: (s, { desc }) => [desc(s.createdAt)],
     limit: 50,
   });
