@@ -336,9 +336,12 @@
 }
 
 .sl-stats-grid .sl-stat-card:nth-child(1) { animation-delay: 0.05s; }
-.sl-stats-grid .sl-stat-card:nth-child(2) { animation-delay: 0.15s; }
-.sl-stats-grid .sl-stat-card:nth-child(3) { animation-delay: 0.25s; }
-.sl-stats-grid .sl-stat-card:nth-child(4) { animation-delay: 0.35s; }
+.sl-stats-grid .sl-stat-card:nth-child(2) { animation-delay: 0.1s; }
+.sl-stats-grid .sl-stat-card:nth-child(3) { animation-delay: 0.15s; }
+.sl-stats-grid .sl-stat-card:nth-child(4) { animation-delay: 0.2s; }
+.sl-stats-grid .sl-stat-card:nth-child(5) { animation-delay: 0.25s; }
+.sl-stats-grid .sl-stat-card:nth-child(6) { animation-delay: 0.3s; }
+.sl-stats-grid .sl-stat-card:nth-child(7) { animation-delay: 0.35s; }
 
 /* Auto-animate chart cards */
 .sl-chart-card {
@@ -1261,8 +1264,8 @@
 /* --- Stats Cards --- */
 .sl-stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
   margin-bottom: 20px;
 }
 

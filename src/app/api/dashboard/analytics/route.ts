@@ -70,6 +70,11 @@ export async function GET(request: NextRequest) {
       with: {
         originAirport: true,
         destAirport: true,
+        flight: {
+          with: {
+            airplane: true,
+          }
+        }
       },
     });
 
@@ -120,16 +125,36 @@ export async function GET(request: NextRequest) {
           return null;
         }
 
+        const departureTime = s.flight?.departureTime
+          ? new Date(s.flight.departureTime).toISOString()
+          : s.createdAt.toISOString();
+
+        const arrivalTime = s.flight?.arrivalTime
+          ? new Date(s.flight.arrivalTime).toISOString()
+          : s.estimatedDelivery
+          ? new Date(s.estimatedDelivery).toISOString()
+          : new Date(s.createdAt.getTime() + 4 * 60 * 60 * 1000).toISOString();
+
         return {
           id: s.id,
           awbNumber: s.awbNumber,
           originLat,
           originLng,
           originIata,
+          originName: s.originAirport!.name,
+          originCountry: s.originAirport!.country,
           destLat,
           destLng,
           destIata,
+          destName: s.destAirport!.name,
+          destCountry: s.destAirport!.country,
           status: s.status,
+          deliveryStatus: s.deliveryStatus,
+          flightNumber: s.flight?.airplane?.flightNumber || 'N/A',
+          departureTime,
+          arrivalTime,
+          estimatedDelivery: s.estimatedDelivery ? s.estimatedDelivery.toISOString() : null,
+          weightKg: s.weightKg ? Number(s.weightKg) : 0,
         };
       })
       .filter((s): s is NonNullable<typeof s> => s !== null);
