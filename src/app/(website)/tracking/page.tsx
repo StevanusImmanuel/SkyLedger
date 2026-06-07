@@ -8,22 +8,38 @@ import AnimatedButton from '@/components/ui/animbutton';
 import Footer from '@/components/landingpages/footer';
 import { BlurText } from '@/components/ui/dynamicanimationfonts';
 import { PageTitle } from '@/components/ui/page-title';
+import { useRouter } from 'next/navigation';
 
 export default function LandingPage() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [awbNumber, setAwbNumber] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 3000);
+    }, 800); // Reduced from 3000ms to 800ms for better LCP
     return () => clearTimeout(timer);
   }, []);
 
   const handleTrack = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!awbNumber) return;
-    console.log("Tracking AWB:", awbNumber);
+    setError('');
+
+    const trimmedAwb = awbNumber.trim();
+    if (!trimmedAwb) {
+      setError('Please enter a tracking number.');
+      return;
+    }
+
+    const SAFE_TRACKING_PATTERN = /^[a-zA-Z0-9-]+$/;
+    if (!SAFE_TRACKING_PATTERN.test(trimmedAwb)) {
+      setError('Tracking number must contain only letters, digits, and hyphens.');
+      return;
+    }
+
+    router.push(`/tracking/${encodeURIComponent(trimmedAwb)}`);
   };
 
   if (isLoading) {
@@ -128,6 +144,12 @@ export default function LandingPage() {
               />
             </div>
           </form>
+
+          {error && (
+            <div className="mt-4 text-sm font-bold text-red-500 animate-in fade-in duration-300">
+              {error}
+            </div>
+          )}
 
           <div className="mt-6 flex justify-center gap-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">
             <span>Example: AWB-772-90123</span>
