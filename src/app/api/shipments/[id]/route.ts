@@ -308,7 +308,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('[PATCH /api/shipments/:id]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to update shipment. Please check your input and try again.' },
+      { status: 500 }
+    );
   }
 }
 

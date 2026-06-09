@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { shipments, flights, airports, airplanes } from '@/lib/db/schema';
+import { shipments, airports } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
 import { sql, eq, desc, count, inArray } from 'drizzle-orm';
 
@@ -73,16 +73,6 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    console.log('[Dashboard] Total active shipments found:', activeShipments.length);
-    if (activeShipments.length > 0) {
-      console.log('[Dashboard] First shipment:', {
-        awb: activeShipments[0].awbNumber,
-        deliveryStatus: activeShipments[0].deliveryStatus,
-        originAirport: activeShipments[0].originAirport?.iataCode,
-        destAirport: activeShipments[0].destAirport?.iataCode,
-      });
-    }
-
     // Map shipments with coordinates (use fallback if database doesn't have them)
     const shipmentMapData = activeShipments
       .filter(s => s.originAirport && s.destAirport)
@@ -104,17 +94,6 @@ export async function GET(request: NextRequest) {
           ? Number(s.destAirport!.longitude)
           : AIRPORT_COORDINATES[destIata]?.lng;
 
-        console.log('[Dashboard] Processing shipment:', {
-          awb: s.awbNumber,
-          originIata,
-          destIata,
-          originLat,
-          originLng,
-          destLat,
-          destLng,
-          hasCoords: !!(originLat && originLng && destLat && destLng)
-        });
-
         // Only include if we have valid coordinates
         if (!originLat || !originLng || !destLat || !destLng) {
           return null;
@@ -133,9 +112,6 @@ export async function GET(request: NextRequest) {
         };
       })
       .filter((s): s is NonNullable<typeof s> => s !== null);
-
-    console.log('[Dashboard] Shipments with valid coordinates:', shipmentMapData.length);
-    console.log('[Dashboard] Shipment map data:', shipmentMapData);
 
     // Top 5 routes by total shipment weight
     // For each route, get the plane that carries the most weight

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ShipmentMap } from '@/components/dashboard/ShipmentMap';
 import { RouteTableSkeleton, ChartSkeleton } from '@/components/ui/skeletons';
@@ -32,10 +32,7 @@ function DashboardContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
 
-  // Memoize shipments to prevent unnecessary re-renders
-  const memoizedShipments = useMemo(() => {
-    return data?.shipmentMapData || [];
-  }, [data?.shipmentMapData?.map(s => s.id).join(',')]);
+  const shipments = data?.shipmentMapData || [];
 
   useEffect(() => {
     async function fetchDashboard() {
@@ -43,7 +40,6 @@ function DashboardContent() {
       try {
         const res = await fetch('/api/dashboard/analytics');
         const json = await res.json();
-        console.log('Dashboard API response:', json);
         if (json.success) {
           setData(json.data);
         } else {
@@ -91,7 +87,7 @@ function DashboardContent() {
       {isLoading ? (
         <ChartSkeleton />
       ) : (
-        <ShipmentMap shipments={memoizedShipments} />
+        <ShipmentMap shipments={shipments} />
       )}
 
       {/* Top Operational Routes Table */}

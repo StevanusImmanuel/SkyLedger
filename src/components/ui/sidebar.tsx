@@ -295,7 +295,7 @@ export function SessionNavBar() {
                             )}
                             <Users className="h-4 w-4 shrink-0" strokeWidth={2.5} />
                             <motion.span variants={variants}>
-                              User Management
+                              Account Management
                             </motion.span>
                           </Link>
                           <Link
@@ -311,7 +311,7 @@ export function SessionNavBar() {
                             )}
                             <ScrollText className="h-4 w-4 shrink-0" strokeWidth={2.5} />
                             <motion.span variants={variants}>
-                              Live Log
+                              Activity Logs
                             </motion.span>
                           </Link>
 
