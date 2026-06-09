@@ -1,10 +1,29 @@
 'use client';
 
-import { Suspense, useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
+import type { MutableRefObject } from 'react';
 import Link from 'next/link';
-import { ShipmentMap } from '@/components/dashboard/ShipmentMap';
+import dynamic from 'next/dynamic';
 import { RouteTableSkeleton, ChartSkeleton } from '@/components/ui/skeletons';
 import { PageTitle } from '@/components/ui/page-title';
+
+const ShipmentMap = dynamic(
+  () => import('@/components/dashboard/ShipmentMap').then((mod) => mod.ShipmentMap),
+  {
+    ssr: false,
+    loading: () => <ChartSkeleton />,
+  }
+);
+
+const MapLibreDashboardWrapper = dynamic(
+  () => import('@/components/maps/MapLibreDashboardWrapper'),
+  {
+    ssr: false,
+    loading: () => <ChartSkeleton />,
+  }
+);
+
+const USE_MAPLIBRE_DASHBOARD_MAP = true;
 
 type ShipmentMapData = {
   id: string;
@@ -28,39 +47,194 @@ type DashboardData = {
   }>;
 };
 
+type DashboardApiResponse =
+  | { success: true; data: DashboardData }
+  | { success?: false; error?: string };
+
+type DashboardFetchResult =
+  | { ok: true; data: DashboardData }
+  | { ok: false; message: string; stopPolling?: boolean; redirectTo?: string };
+
+type DashboardDebugInfo = {
+  status?: number;
+  contentType?: string;
+  redirected?: boolean;
+  url?: string;
+  snippet?: string;
+  reason: string;
+};
+
+function isJsonResponse(response: Response) {
+  return response.headers.get('content-type')?.toLowerCase().includes('application/json') ?? false;
+}
+
+function createSnippet(value: string) {
+  return value.replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+
+async function warnDashboardFetchOnce(
+  warningKeyRef: MutableRefObject<string>,
+  info: DashboardDebugInfo
+) {
+  const warningKey = [
+    info.reason,
+    info.status,
+    info.contentType,
+    info.redirected,
+    info.url,
+    info.snippet,
+  ].join('|');
+
+  if (warningKeyRef.current === warningKey) return;
+  warningKeyRef.current = warningKey;
+
+  console.warn('[Dashboard] Analytics fetch did not return usable JSON.', info);
+}
+
+async function readDashboardResponse(
+  response: Response,
+  warningKeyRef: MutableRefObject<string>
+): Promise<DashboardFetchResult> {
+  const contentType = response.headers.get('content-type') || '';
+  const responseMeta = {
+    status: response.status,
+    contentType,
+    redirected: response.redirected,
+    url: response.url,
+  };
+
+  if (response.redirected && response.url.includes('/login/restricted')) {
+    await warnDashboardFetchOnce(warningKeyRef, {
+      ...responseMeta,
+      reason: 'redirected-to-restricted',
+    });
+
+    return {
+      ok: false,
+      message: 'Dashboard data belum bisa dimuat. Silakan login ulang.',
+      stopPolling: true,
+      redirectTo: '/login/restricted',
+    };
+  }
+
+  if (!isJsonResponse(response)) {
+    const text = await response.text().catch(() => '');
+
+    await warnDashboardFetchOnce(warningKeyRef, {
+      ...responseMeta,
+      reason: 'non-json-response',
+      snippet: createSnippet(text),
+    });
+
+    return {
+      ok: false,
+      message: 'Dashboard data belum bisa dimuat. Silakan refresh atau login ulang.',
+      stopPolling: response.status === 401 || response.status === 403 || response.redirected,
+    };
+  }
+
+  let payload: DashboardApiResponse;
+  try {
+    payload = await response.json();
+  } catch {
+    await warnDashboardFetchOnce(warningKeyRef, {
+      ...responseMeta,
+      reason: 'invalid-json-body',
+    });
+
+    return {
+      ok: false,
+      message: 'Dashboard data belum bisa dimuat. Silakan refresh atau login ulang.',
+      stopPolling: !response.ok,
+    };
+  }
+
+  if (payload.success === true) {
+    return { ok: true, data: payload.data };
+  }
+
+  if (!response.ok || payload.success === false) {
+    await warnDashboardFetchOnce(warningKeyRef, {
+      ...responseMeta,
+      reason: 'json-error-response',
+      snippet: payload.error,
+    });
+
+    return {
+      ok: false,
+      message: payload.error || 'Dashboard data belum bisa dimuat. Silakan refresh atau login ulang.',
+      stopPolling: response.status === 401 || response.status === 403,
+      redirectTo: response.status === 401 ? '/login/restricted' : undefined,
+    };
+  }
+
+  return {
+    ok: false,
+    message: 'Dashboard data belum bisa dimuat. Silakan refresh atau login ulang.',
+  };
+}
+
 function DashboardContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
+  const [dashboardError, setDashboardError] = useState('');
+  const shouldStopPollingRef = useRef(false);
+  const dashboardWarningKeyRef = useRef('');
 
-  // Memoize shipments to prevent unnecessary re-renders
-  const memoizedShipments = useMemo(() => {
-    return data?.shipmentMapData || [];
-  }, [data?.shipmentMapData?.map(s => s.id).join(',')]);
+  const shipmentMapData = data?.shipmentMapData || [];
 
   useEffect(() => {
-    async function fetchDashboard() {
-      setIsLoading(true);
+    async function fetchDashboard(showLoading = false) {
+      if (shouldStopPollingRef.current) return;
+      if (showLoading) setIsLoading(true);
+
       try {
-        const res = await fetch('/api/dashboard/analytics');
-        const json = await res.json();
-        console.log('Dashboard API response:', json);
-        if (json.success) {
-          setData(json.data);
+        const res = await fetch('/api/dashboard/analytics', {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        });
+        const result = await readDashboardResponse(res, dashboardWarningKeyRef);
+
+        if (result.ok) {
+          setData(result.data);
+          setDashboardError('');
+          dashboardWarningKeyRef.current = '';
         } else {
-          console.error('Dashboard API error:', json.error);
+          setDashboardError(result.message);
+
+          if (result.stopPolling) {
+            shouldStopPollingRef.current = true;
+          }
+
+          if (result.redirectTo && typeof window !== 'undefined') {
+            window.location.assign(result.redirectTo);
+          }
         }
       } catch (err) {
-        console.error('Failed to fetch dashboard data:', err);
+        const message =
+          err instanceof Error && err.name === 'AbortError'
+            ? 'Dashboard request timed out. Please try again.'
+            : 'Dashboard data belum bisa dimuat. Silakan refresh atau login ulang.';
+        await warnDashboardFetchOnce(dashboardWarningKeyRef, {
+          reason: err instanceof Error ? `fetch-error:${err.name}` : 'fetch-error',
+          snippet: err instanceof Error ? createSnippet(err.message) : undefined,
+        });
+        setDashboardError(message);
       } finally {
-        setIsLoading(false);
+        if (showLoading) setIsLoading(false);
       }
     }
 
     // Initial fetch
-    fetchDashboard();
+    fetchDashboard(true);
 
     // Poll every 30 seconds to keep data fresh
     const interval = setInterval(() => {
+      if (shouldStopPollingRef.current) {
+        clearInterval(interval);
+        return;
+      }
+
       fetchDashboard();
     }, 30000);
 
@@ -72,7 +246,9 @@ function DashboardContent() {
       <div>
         <div className="sl-page-header">
           <h1 className="sl-page-title">Operations Analytics</h1>
-          <p className="sl-page-subtitle">Unable to load dashboard data. Please check your connection.</p>
+          <p className="sl-page-subtitle">
+            {dashboardError || 'Dashboard data belum bisa dimuat. Silakan refresh atau login ulang.'}
+          </p>
         </div>
       </div>
     );
@@ -84,14 +260,18 @@ function DashboardContent() {
       {/* Page Header */}
       <div className="sl-page-header">
         <h1 className="sl-page-title">Operations Analytics</h1>
-        <p className="sl-page-subtitle">Real-time performance metrics for Global Hub A-42</p>
+        <p className="sl-page-subtitle">
+          {dashboardError || 'Real-time performance metrics for Global Hub A-42'}
+        </p>
       </div>
 
       {/* Shipment Map */}
       {isLoading ? (
         <ChartSkeleton />
+      ) : USE_MAPLIBRE_DASHBOARD_MAP ? (
+        <MapLibreDashboardWrapper shipments={shipmentMapData} />
       ) : (
-        <ShipmentMap shipments={memoizedShipments} />
+        <ShipmentMap shipments={shipmentMapData} />
       )}
 
       {/* Top Operational Routes Table */}

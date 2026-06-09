@@ -1,8 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import type {
+  LatLngTuple,
+  Layer,
+  Map as LeafletMap,
+  Marker as LeafletMarker,
+} from 'leaflet';
 
 type ShipmentMapData = {
   id: string;
@@ -20,37 +26,145 @@ type ShipmentMapProps = {
   shipments: ShipmentMapData[];
 };
 
+type RouteAnimation = {
+  marker: LeafletMarker;
+  origin: LatLngTuple;
+  destination: LatLngTuple;
+  bearing: number;
+  startedAt: number;
+  duration: number;
+  pauseDuration: number;
+  rotationElement: HTMLElement | null;
+};
+
+const ROUTE_ANIMATION_DURATION_MS = 30000;
+const ROUTE_PAUSE_DURATION_MS = 2000;
+const ROUTE_STAGGER_MS = 1400;
+
+function isValidCoordinate(lat: number, lng: number) {
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
+function getShipmentSignature(shipments: ShipmentMapData[]) {
+  return shipments
+    .map((shipment) =>
+      [
+        shipment.id,
+        shipment.originLat,
+        shipment.originLng,
+        shipment.destLat,
+        shipment.destLng,
+        shipment.status,
+      ].join(':')
+    )
+    .sort()
+    .join('|');
+}
+
+function getPathColor(status: string) {
+  if (status === 'in_transit') return '#0ea5e9';
+  if (status === 'delayed') return '#ef4444';
+  return '#8b5cf6';
+}
+
+function interpolatePoint(
+  origin: LatLngTuple,
+  destination: LatLngTuple,
+  progress: number
+): LatLngTuple {
+  return [
+    origin[0] + (destination[0] - origin[0]) * progress,
+    origin[1] + (destination[1] - origin[1]) * progress,
+  ];
+}
+
+function getBearing(origin: LatLngTuple, destination: LatLngTuple) {
+  const lat1 = (origin[0] * Math.PI) / 180;
+  const lat2 = (destination[0] * Math.PI) / 180;
+  const lngDelta = ((destination[1] - origin[1]) * Math.PI) / 180;
+  const y = Math.sin(lngDelta) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(lngDelta);
+
+  return (Math.atan2(y, x) * 180) / Math.PI + 90;
+}
+
 function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
-  const mapRef = useRef<any>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  const [isClient, setIsClient] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
-  const animationFramesRef = useRef<number[]>([]);
-  const markersRef = useRef<any[]>([]);
-  const lastShipmentIdsRef = useRef<string>('');
-
-  console.log('[ShipmentMap] Received shipments:', shipments.length);
-  console.log('[ShipmentMap] Shipments data:', shipments);
+  const [isContainerReady, setIsContainerReady] = useState(false);
+  const animationFrameRef = useRef<number | null>(null);
+  const timeoutIdsRef = useRef<number[]>([]);
+  const routeAnimationsRef = useRef<RouteAnimation[]>([]);
+  const layersRef = useRef<Layer[]>([]);
+  const lastShipmentSignatureRef = useRef<string>('');
+  const renderGenerationRef = useRef(0);
 
   useEffect(() => {
-    setIsClient(true);
-    // Import Leaflet CSS dynamically
     if (typeof window !== 'undefined') {
       import('leaflet/dist/leaflet.css');
     }
   }, []);
 
-  useEffect(() => {
-    console.log('[ShipmentMap init] Starting map initialization, isClient:', isClient, 'hasContainer:', !!mapContainerRef.current, 'hasMap:', !!mapRef.current);
+  const stopAnimations = useCallback(() => {
+    if (animationFrameRef.current !== null) {
+      window.cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
 
-    if (!isClient || !mapContainerRef.current || mapRef.current) return;
+    timeoutIdsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    timeoutIdsRef.current = [];
+    routeAnimationsRef.current = [];
+  }, []);
+
+  useEffect(() => {
+    const container = mapContainerRef.current;
+
+    if (!container) return;
+
+    const mapElement = container;
+    let isDisposed = false;
+
+    function updateContainerReady() {
+      if (isDisposed) return;
+
+      const width = mapElement.clientWidth;
+      const height = mapElement.clientHeight;
+      setIsContainerReady(width > 0 && height > 0);
+    }
+
+    updateContainerReady();
+
+    const resizeObserver = new ResizeObserver(updateContainerReady);
+    resizeObserver.observe(mapElement);
+    window.addEventListener('resize', updateContainerReady);
+
+    return () => {
+      isDisposed = true;
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateContainerReady);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isDisposed = false;
+    let invalidateFrameId: number | null = null;
+
+    if (!isContainerReady || !mapContainerRef.current || mapRef.current) return;
 
     // Dynamically import Leaflet only on client side
     import('leaflet').then((L) => {
-      console.log('[ShipmentMap init] Leaflet imported');
-
-      if (!mapContainerRef.current || mapRef.current) return;
+      if (isDisposed || !mapContainerRef.current || mapRef.current) return;
 
       // Initialize map
       const map = L.map(mapContainerRef.current, {
@@ -61,7 +175,6 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
       });
 
       mapRef.current = map;
-      console.log('[ShipmentMap init] Map initialized successfully');
 
       // Add tile layer
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -70,112 +183,112 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
       }).addTo(map);
 
       // Signal that map is ready
+      invalidateFrameId = window.requestAnimationFrame(() => {
+        invalidateFrameId = null;
+        if (!isDisposed && mapRef.current === map) {
+          map.invalidateSize();
+        }
+      });
       setIsMapReady(true);
     });
 
     return () => {
-      // Cancel all animations on cleanup
-      animationFramesRef.current.forEach(id => cancelAnimationFrame(id));
-      animationFramesRef.current = [];
+      isDisposed = true;
+      stopAnimations();
+
+      if (invalidateFrameId !== null) {
+        window.cancelAnimationFrame(invalidateFrameId);
+      }
+
+      layersRef.current.forEach((layer) => {
+        if (mapRef.current?.hasLayer(layer)) {
+          mapRef.current.removeLayer(layer);
+        }
+      });
+      layersRef.current = [];
 
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
+      setIsMapReady(false);
     };
-  }, [isClient]);
+  }, [isContainerReady, stopAnimations]);
 
   useEffect(() => {
-    console.log('[ShipmentMap useEffect] Running with:', {
-      isMapReady,
-      shipmentsLength: shipments.length
-    });
-
-    if (!isMapReady || shipments.length === 0) {
-      console.log('[ShipmentMap useEffect] Early return - conditions not met');
-      return;
-    }
+    if (!isMapReady) return;
 
     // Check if shipments have actually changed
-    const currentShipmentIds = shipments.map(s => s.id).sort().join(',');
-    if (currentShipmentIds === lastShipmentIdsRef.current) {
-      console.log('[ShipmentMap useEffect] Shipments unchanged, skipping re-render');
+    const currentShipmentSignature = getShipmentSignature(shipments);
+    if (currentShipmentSignature === lastShipmentSignatureRef.current) {
       return;
     }
 
-    console.log('[ShipmentMap useEffect] Shipments changed, re-rendering planes');
-    lastShipmentIdsRef.current = currentShipmentIds;
-
-    console.log('[ShipmentMap useEffect] Starting to render planes...');
+    lastShipmentSignatureRef.current = currentShipmentSignature;
+    renderGenerationRef.current += 1;
+    const renderGeneration = renderGenerationRef.current;
 
     const map = mapRef.current;
-    if (!map) {
-      console.log('[ShipmentMap useEffect] Map not ready yet');
-      return;
-    }
+    if (!map || !map.getContainer().isConnected) return;
+    const activeMap = map;
 
     // Import Leaflet dynamically
     import('leaflet').then((L) => {
-      console.log('[ShipmentMap] Leaflet loaded, rendering', shipments.length, 'shipments');
+      if (
+        renderGeneration !== renderGenerationRef.current ||
+        mapRef.current !== activeMap ||
+        !activeMap.getContainer().isConnected
+      ) {
+        return;
+      }
 
-      // Cancel previous animations
-      animationFramesRef.current.forEach(id => cancelAnimationFrame(id));
-      animationFramesRef.current = [];
+      stopAnimations();
 
-      // Clear existing markers and layers ONLY when shipments change
-      markersRef.current.forEach(marker => {
-        if (marker && map.hasLayer(marker)) {
-          map.removeLayer(marker);
+      layersRef.current.forEach((layer) => {
+        if (activeMap.hasLayer(layer)) {
+          activeMap.removeLayer(layer);
         }
       });
-      markersRef.current = [];
-
-      // Clear existing layers except tile layer
-      map.eachLayer((layer: any) => {
-        if (layer instanceof L.Marker || layer instanceof L.Polyline || layer instanceof L.CircleMarker) {
-          map.removeLayer(layer);
-        }
-      });
-
-      console.log('[ShipmentMap] Cleared previous layers');
+      layersRef.current = [];
 
       // Create plane icon
       const planeIcon = L.divIcon({
-        html: `<svg width="24" height="24" viewBox="0 0 24 24" fill="#1a2d5a" stroke="#fff" stroke-width="1.5">
-          <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21 4 21 4s-2 0-3.5 1.5L14 9 5.8 7.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 3.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
-        </svg>`,
+        html: `<span class="plane-marker-rotator">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="#1a2d5a" stroke="#fff" stroke-width="1.5" aria-hidden="true" focusable="false">
+            <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21 4 21 4s-2 0-3.5 1.5L14 9 5.8 7.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 3.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+          </svg>
+        </span>`,
         className: 'plane-marker',
         iconSize: [24, 24],
         iconAnchor: [12, 12],
       });
 
-      const bounds: any[] = [];
+      const bounds: LatLngTuple[] = [];
+      const nextAnimations: RouteAnimation[] = [];
+      const validShipments = shipments.filter((shipment) =>
+        isValidCoordinate(shipment.originLat, shipment.originLng) &&
+        isValidCoordinate(shipment.destLat, shipment.destLng)
+      );
 
       // Add shipment routes with animation
-      shipments.forEach((shipment, index) => {
-        const origin: [number, number] = [shipment.originLat, shipment.originLng];
-        const dest: [number, number] = [shipment.destLat, shipment.destLng];
-
-        console.log('[ShipmentMap] Creating route for', shipment.awbNumber, 'from', origin, 'to', dest);
+      validShipments.forEach((shipment, index) => {
+        const origin: LatLngTuple = [shipment.originLat, shipment.originLng];
+        const dest: LatLngTuple = [shipment.destLat, shipment.destLng];
 
         bounds.push(origin, dest);
 
         // Draw flight path
-        const pathColor = shipment.status === 'in_transit' ? '#0ea5e9' :
-                         shipment.status === 'delayed' ? '#ef4444' : '#8b5cf6';
-
-        L.polyline([origin, dest], {
-          color: pathColor,
+        const routeLine = L.polyline([origin, dest], {
+          color: getPathColor(shipment.status),
           weight: 2,
           opacity: 0.6,
           dashArray: '5, 10',
-        }).addTo(map);
-
-        console.log('[ShipmentMap] Flight path added');
+        }).addTo(activeMap);
+        layersRef.current.push(routeLine);
 
         // Create animated plane marker
         const marker = L.marker(origin, { icon: planeIcon })
-          .addTo(map)
+          .addTo(activeMap)
           .bindPopup(`
             <div style="font-family: system-ui; padding: 4px;">
               <div style="font-weight: 700; font-size: 13px; color: #1a2d5a; margin-bottom: 4px;">
@@ -190,75 +303,35 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
             </div>
           `);
 
-        console.log('[ShipmentMap] Plane marker created at', origin);
-
-        // Store marker in ref
-        markersRef.current.push(marker);
+        layersRef.current.push(marker);
 
         // Add click handler to navigate to shipment details
         marker.on('click', () => {
           router.push(`/shipments/${shipment.id}`);
         });
 
-        // Animate plane movement
-        const duration = 30000; // 30 seconds for full journey (moderate pace)
-        let animationStartTime = Date.now() + (index * 2000); // Stagger start times
-        let frameCount = 0;
+        const markerElement = marker.getElement();
+        const rotationElement = markerElement?.querySelector<HTMLElement>(
+          '.plane-marker-rotator'
+        ) ?? null;
 
-        const animate = () => {
-          const now = Date.now();
-          const elapsed = now - animationStartTime;
-          const progress = Math.min(elapsed / duration, 1);
+        if (rotationElement) {
+          rotationElement.style.transform = `rotate(${getBearing(origin, dest)}deg)`;
+        }
 
-          frameCount++;
-          if (frameCount % 60 === 0) { // Log every 60 frames (~1 second)
-            console.log('[ShipmentMap] Animating', shipment.awbNumber, 'progress:', (progress * 100).toFixed(1) + '%');
-          }
-
-          // Linear interpolation for smooth, steady movement
-          const currentLat = origin[0] + (dest[0] - origin[0]) * progress;
-          const currentLng = origin[1] + (dest[1] - origin[1]) * progress;
-
-          // Update marker position
-          marker.setLatLng([currentLat, currentLng]);
-
-          // Calculate rotation angle to face the destination
-          const angle = Math.atan2(dest[0] - origin[0], dest[1] - origin[1]) * (180 / Math.PI);
-          const markerElement = marker.getElement();
-          if (markerElement) {
-            markerElement.style.transform = `rotate(${angle}deg)`;
-          }
-
-          // Continue animation if not complete
-          if (progress < 1) {
-            const frameId = requestAnimationFrame(animate);
-            animationFramesRef.current.push(frameId);
-          } else {
-            // Reached destination - loop back to origin
-            console.log('[ShipmentMap] Animation complete for', shipment.awbNumber, '- restarting in 2s');
-            setTimeout(() => {
-              marker.setLatLng(origin);
-              animationStartTime = Date.now(); // Reset start time for new loop
-              frameCount = 0;
-              console.log('[ShipmentMap] Restarting animation for', shipment.awbNumber);
-              const newFrameId = requestAnimationFrame(animate);
-              animationFramesRef.current.push(newFrameId);
-            }, 2000); // Wait 2 seconds at destination before restarting
-          }
-        };
-
-        // Start animation after initial delay
-        const delayMs = index * 2000;
-        console.log('[ShipmentMap] Scheduling animation for', shipment.awbNumber, 'with delay', delayMs, 'ms');
-
-        setTimeout(() => {
-          console.log('[ShipmentMap] Starting animation NOW for', shipment.awbNumber);
-          const frameId = requestAnimationFrame(animate);
-          animationFramesRef.current.push(frameId);
-        }, delayMs);
+        nextAnimations.push({
+          marker,
+          origin,
+          destination: dest,
+          bearing: getBearing(origin, dest),
+          startedAt: performance.now() + index * ROUTE_STAGGER_MS,
+          duration: ROUTE_ANIMATION_DURATION_MS,
+          pauseDuration: ROUTE_PAUSE_DURATION_MS,
+          rotationElement,
+        });
 
         // Add origin marker
-        L.circleMarker(origin, {
+        const originMarker = L.circleMarker(origin, {
           radius: 6,
           fillColor: '#10b981',
           color: '#fff',
@@ -266,11 +339,12 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
           opacity: 1,
           fillOpacity: 0.8,
         })
-          .addTo(map)
+          .addTo(activeMap)
           .bindPopup(`<div style="font-size: 12px; font-weight: 600;">${shipment.originIata}</div>`);
+        layersRef.current.push(originMarker);
 
         // Add destination marker
-        L.circleMarker(dest, {
+        const destinationMarker = L.circleMarker(dest, {
           radius: 6,
           fillColor: '#ef4444',
           color: '#fff',
@@ -278,32 +352,64 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
           opacity: 1,
           fillOpacity: 0.8,
         })
-          .addTo(map)
+          .addTo(activeMap)
           .bindPopup(`<div style="font-size: 12px; font-weight: 600;">${shipment.destIata}</div>`);
+        layersRef.current.push(destinationMarker);
       });
 
+      routeAnimationsRef.current = nextAnimations;
+
+      function animateRoutes(timestamp: number) {
+        if (mapRef.current !== activeMap || !activeMap.getContainer().isConnected) {
+          stopAnimations();
+          return;
+        }
+
+        routeAnimationsRef.current.forEach((animation) => {
+          const markerElement = animation.marker.getElement();
+
+          if (!markerElement || !markerElement.isConnected || !activeMap.hasLayer(animation.marker)) {
+            return;
+          }
+
+          const cycleDuration = animation.duration + animation.pauseDuration;
+          const elapsed = Math.max(0, timestamp - animation.startedAt);
+          const cycleElapsed = elapsed % cycleDuration;
+          const progress = Math.min(cycleElapsed / animation.duration, 1);
+          const nextPosition = interpolatePoint(
+            animation.origin,
+            animation.destination,
+            progress
+          );
+
+          animation.marker.setLatLng(nextPosition);
+
+          if (animation.rotationElement) {
+            animation.rotationElement.style.transform = `rotate(${animation.bearing}deg)`;
+          }
+        });
+
+        animationFrameRef.current = window.requestAnimationFrame(animateRoutes);
+      }
+
+      if (
+        routeAnimationsRef.current.length > 0 &&
+        mapRef.current === activeMap &&
+        activeMap.getContainer().isConnected
+      ) {
+        animationFrameRef.current = window.requestAnimationFrame(animateRoutes);
+      }
+
       // Fit map to show all markers
-      if (bounds.length > 0) {
-        map.fitBounds(bounds, { padding: [50, 50] });
+      if (
+        bounds.length > 0 &&
+        mapRef.current === activeMap &&
+        activeMap.getContainer().isConnected
+      ) {
+        activeMap.fitBounds(bounds, { padding: [50, 50] });
       }
     });
-  }, [shipments, isMapReady]);
-
-  if (!isClient) {
-    return (
-      <div className="sl-chart-card" style={{ height: 400 }}>
-        <div className="sl-chart-header">
-          <div>
-            <p className="sl-chart-title">Active Shipments Map</p>
-            <p className="sl-chart-subtitle">Real-time flight tracking</p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 320 }}>
-          <p style={{ color: '#94a3b8', fontSize: 13 }}>Loading map...</p>
-        </div>
-      </div>
-    );
-  }
+  }, [shipments, isMapReady, router, stopAnimations]);
 
   return (
     <div className="sl-chart-card" style={{ height: 400 }}>
@@ -320,6 +426,8 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
         ref={mapContainerRef}
         style={{
           height: 320,
+          minHeight: 320,
+          width: '100%',
           borderRadius: 8,
           overflow: 'hidden',
         }}
@@ -335,6 +443,13 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
         }
         .plane-marker svg {
           display: block;
+        }
+        .plane-marker-rotator {
+          display: block;
+          height: 24px;
+          transform-origin: center;
+          width: 24px;
+          will-change: transform;
         }
         .leaflet-popup-content-wrapper {
           border-radius: 8px;

@@ -8,10 +8,35 @@ import { and, count, eq, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import { logActivity } from '@/lib/activity-logger';
 
+type AuthResult =
+  | { user: Awaited<ReturnType<typeof getSessionUser>>; response?: never }
+  | { user?: never; response: NextResponse };
+
+function logDatabaseConnectionError(context: string, error: unknown) {
+  console.error(context, {
+    name: error instanceof Error ? error.name : 'UnknownError',
+    message: error instanceof Error ? error.message : 'Unknown database error',
+  });
+}
+
 async function getAuthUser(request: NextRequest) {
   const token = request.cookies.get('terminal_session')?.value;
   if (!token) return null;
   return getSessionUser(token);
+}
+
+async function getAuthResult(request: NextRequest, context: string): Promise<AuthResult> {
+  try {
+    return { user: await getAuthUser(request) };
+  } catch (error) {
+    logDatabaseConnectionError(`${context} session lookup failed`, error);
+    return {
+      response: NextResponse.json(
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
+      ),
+    };
+  }
 }
 
 const roleSchema = z.enum(['admin', 'operator', 'viewer']);
@@ -80,7 +105,10 @@ function safeUserColumns() {
 // GET /api/users         — list all users (admin only)
 // GET /api/users?me=true — return current user profile
 export async function GET(request: NextRequest) {
-  const user = await getAuthUser(request);
+  const auth = await getAuthResult(request, '[GET /api/users]');
+  if (auth.response) return auth.response;
+
+  const user = auth.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const isMe = request.nextUrl.searchParams.get('me') === 'true';
@@ -105,7 +133,10 @@ export async function GET(request: NextRequest) {
 
 // POST /api/users — create user (admin only)
 export async function POST(request: NextRequest) {
-  const user = await getAuthUser(request);
+  const auth = await getAuthResult(request, '[POST /api/users]');
+  if (auth.response) return auth.response;
+
+  const user = auth.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (user.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
@@ -166,7 +197,10 @@ export async function POST(request: NextRequest) {
 // PATCH /api/users — update own profile (name, department)
 // PATCH /api/users?id=:id — update user (admin only)
 export async function PATCH(request: NextRequest) {
-  const user = await getAuthUser(request);
+  const auth = await getAuthResult(request, '[PATCH /api/users]');
+  if (auth.response) return auth.response;
+
+  const user = auth.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
@@ -284,7 +318,10 @@ export async function PATCH(request: NextRequest) {
 // DELETE /api/users?id=:id — deactivate user (admin only, soft delete)
 // DELETE /api/users?id=:id&permanent=true — permanently delete user (admin only)
 export async function DELETE(request: NextRequest) {
-  const user = await getAuthUser(request);
+  const auth = await getAuthResult(request, '[DELETE /api/users]');
+  if (auth.response) return auth.response;
+
+  const user = auth.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (user.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 

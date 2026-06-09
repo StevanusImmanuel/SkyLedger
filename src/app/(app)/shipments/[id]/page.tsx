@@ -340,7 +340,12 @@ export default function ShipmentDetailPage() {
           <DetailCard label="Destination Address" value={details.destinationAddress || "N/A"} />
         </Section>
 
-        <ShipmentRouteMap originAirport={originAirport} destAirport={destAirport} />
+        <ShipmentRouteMap
+          originAirport={originAirport}
+          destAirport={destAirport}
+          status={shipment.status}
+          deliveryStatus={shipment.deliveryStatus}
+        />
 
         <Section icon={<Package size={18} strokeWidth={2.4} />} title="Cargo And Delivery">
           <DetailCard label="Priority Level" value={formatPriority(shipment.priority)} />

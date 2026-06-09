@@ -585,6 +585,20 @@
     padding: 16px 12px;
   }
 
+  .sl-dashboard-page {
+    margin: -16px -12px;
+    padding: 16px 12px;
+  }
+
+  .sl-live-flight-card {
+    min-height: 390px;
+    height: 390px;
+  }
+
+  .sl-live-flight-header {
+    gap: 10px;
+  }
+
   /* Details grid mobile */
   .sl-details-grid {
     grid-template-columns: 1fr;
@@ -1373,6 +1387,219 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-top: 2px;
+}
+
+.sl-dashboard-page {
+  min-height: 100%;
+  margin: -24px -28px;
+  padding: 24px 28px;
+  background: #94a3b8;
+}
+
+.sl-live-flight-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 430px;
+  height: clamp(430px, 46vw, 560px);
+  margin-bottom: 20px;
+}
+
+.sl-live-flight-header {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.sl-live-flight-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.sl-live-flight-map {
+  flex: 1;
+  width: 100%;
+  min-height: 320px;
+}
+
+.sl-world-map-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+  overflow: hidden;
+  border-radius: 8px;
+  background-color: #030712;
+  background-image:
+    radial-gradient(circle at 18% 24%, rgba(255, 255, 255, 0.75) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 72% 18%, rgba(34, 211, 238, 0.55) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 44% 68%, rgba(255, 255, 255, 0.5) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 86% 76%, rgba(255, 255, 255, 0.42) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 10% 82%, rgba(34, 211, 238, 0.42) 0 1px, transparent 1.5px);
+  background-size: 170px 170px, 230px 230px, 290px 290px, 210px 210px, 260px 260px;
+}
+
+.sl-world-map-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 12% 16%, rgba(255, 255, 255, 0.48) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 84% 32%, rgba(255, 255, 255, 0.36) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 56% 88%, rgba(34, 211, 238, 0.34) 0 1px, transparent 1.5px);
+  background-size: 130px 130px, 190px 190px, 240px 240px;
+  opacity: 0.34;
+}
+
+.sl-world-map-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  background: #030712;
+}
+
+.sl-world-map-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  box-shadow: inset 0 0 130px 30px rgba(1, 4, 12, 0.85);
+}
+
+.sl-world-map-status {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: #d7f8ff;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  background: rgba(3, 7, 18, 0.52);
+}
+
+.sl-world-map-shell .maplibregl-map,
+.sl-world-map-shell .maplibregl-canvas-container,
+.sl-world-map-shell .maplibregl-canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.sl-world-map-shell .maplibregl-canvas {
+  outline: none;
+}
+
+.sl-world-map-shell .maplibregl-ctrl-attrib {
+  color: rgba(226, 232, 240, 0.8);
+  background: rgba(3, 7, 18, 0.62);
+  font-size: 10px;
+}
+
+.sl-world-map-shell .aircraft-marker.selected {
+  background: rgba(34, 211, 238, 0.26) !important;
+  box-shadow:
+    0 0 0 2px rgba(103, 232, 249, 0.95),
+    0 0 24px rgba(34, 211, 238, 0.9);
+  filter: drop-shadow(0 0 22px rgba(34, 211, 238, 1)) !important;
+  transform: scale(1.12);
+}
+
+.sl-world-map-shell .sl-aircraft-popup {
+  z-index: 4;
+}
+
+.sl-world-map-shell .sl-aircraft-popup .maplibregl-popup-content {
+  width: min(260px, 74vw);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(34, 211, 238, 0.58);
+  border-radius: 8px;
+  background: rgba(3, 7, 18, 0.88);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+  color: #e2e8f0;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.sl-world-map-shell .sl-aircraft-popup .maplibregl-popup-tip {
+  border-top-color: rgba(34, 211, 238, 0.58);
+  border-bottom-color: rgba(34, 211, 238, 0.58);
+  border-left-color: rgba(34, 211, 238, 0.58);
+  border-right-color: rgba(34, 211, 238, 0.58);
+}
+
+.sl-world-map-shell .sl-aircraft-popup .maplibregl-popup-close-button {
+  top: 7px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: #cffafe;
+  font-size: 18px;
+  line-height: 22px;
+}
+
+.sl-world-map-shell .sl-aircraft-popup .maplibregl-popup-close-button:hover {
+  background: rgba(34, 211, 238, 0.16);
+  color: #ffffff;
+}
+
+.sl-aircraft-popup-card {
+  padding: 13px 14px 14px;
+}
+
+.sl-aircraft-popup-kicker {
+  margin-bottom: 4px;
+  color: #67e8f9;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.sl-aircraft-popup-title {
+  margin-bottom: 10px;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+}
+
+.sl-aircraft-popup-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.sl-aircraft-popup-list div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 9px;
+}
+
+.sl-aircraft-popup-list dt,
+.sl-aircraft-popup-list dd {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.sl-aircraft-popup-list dt {
+  color: #94a3b8;
+  font-weight: 800;
+}
+
+.sl-aircraft-popup-list dd {
+  color: #e2e8f0;
+  font-weight: 700;
 }
 
 .sl-chart-legend {
