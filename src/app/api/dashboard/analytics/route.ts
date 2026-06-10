@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { shipments, airports } from '@/lib/db/schema';
+import { shipments } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
-import { sql, eq, desc, count, inArray } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 
 async function getAuthUser(req: NextRequest) {
   const token = req.cookies.get('terminal_session')?.value;
   if (!token) return null;
   return getSessionUser(token);
 }
+
+const EMPTY_DASHBOARD_DATA = {
+  shipmentMapData: [],
+  topRoutes: [],
+};
 
 // Fallback airport coordinates for common IATA codes
 const AIRPORT_COORDINATES: Record<string, { lat: number; lng: number }> = {
@@ -52,10 +57,12 @@ const AIRPORT_COORDINATES: Record<string, { lat: number; lng: number }> = {
 };
 
 export async function GET(request: NextRequest) {
-  const user = await getAuthUser(request);
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   try {
+    const user = await getAuthUser(request);
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Get active shipments for map (based on delivery_status)
     // Active means: booked, received_at_warehouse, security_cleared, manifested, departed, transshipment
     const activeShipments = await db.query.shipments.findMany({
@@ -95,7 +102,12 @@ export async function GET(request: NextRequest) {
           : AIRPORT_COORDINATES[destIata]?.lng;
 
         // Only include if we have valid coordinates
-        if (!originLat || !originLng || !destLat || !destLng) {
+        if (
+          !Number.isFinite(originLat) ||
+          !Number.isFinite(originLng) ||
+          !Number.isFinite(destLat) ||
+          !Number.isFinite(destLng)
+        ) {
           return null;
         }
 
@@ -113,61 +125,83 @@ export async function GET(request: NextRequest) {
       })
       .filter((s): s is NonNullable<typeof s> => s !== null);
 
-    // Top 5 routes by total shipment weight
-    // For each route, get the plane that carries the most weight
-    const topRoutesRaw = await db
-      .select({
-        originCode: airports.iataCode,
-        originCity: airports.city,
-        originCountry: airports.country,
-        destCode: sql<string>`dest_airport.iata_code`,
-        destCity: sql<string>`dest_airport.city`,
-        destCountry: sql<string>`dest_airport.country`,
-        planeId: sql<string>`(
-          SELECT ap.flight_number
-          FROM shipments s2
-          LEFT JOIN flights f2 ON s2.flight_id = f2.id
-          LEFT JOIN airplanes ap ON f2.airplane_id = ap.airplane_id
-          WHERE s2.origin_airport_id = ${shipments.originAirportId}
-            AND s2.dest_airport_id = ${shipments.destAirportId}
-            AND ap.flight_number IS NOT NULL
-          GROUP BY ap.flight_number
-          ORDER BY SUM(CAST(s2.weight_kg AS NUMERIC)) DESC
-          LIMIT 1
-        )`,
-        totalWeight: sql<number>`COALESCE(SUM(CAST(${shipments.weightKg} AS NUMERIC)), 0)`,
-        shipmentCount: count(),
-      })
-      .from(shipments)
-      .innerJoin(airports, eq(shipments.originAirportId, airports.id))
-      .innerJoin(sql`airports AS dest_airport`, sql`${shipments.destAirportId} = dest_airport.id`)
-      .groupBy(
-        airports.iataCode,
-        airports.city,
-        airports.country,
-        sql`dest_airport.iata_code`,
-        sql`dest_airport.city`,
-        sql`dest_airport.country`,
-        shipments.originAirportId,
-        shipments.destAirportId
-      )
-      .orderBy(desc(sql`COALESCE(SUM(CAST(${shipments.weightKg} AS NUMERIC)), 0)`))
-      .limit(5);
+    const routeShipments = await db.query.shipments.findMany({
+      with: {
+        originAirport: true,
+        destAirport: true,
+        flight: {
+          with: {
+            airplane: true,
+          },
+        },
+      },
+    });
+
+    const routeMap = new Map<
+      string,
+      {
+        originCode: string;
+        originCity: string;
+        originCountry: string;
+        destCode: string;
+        destCity: string;
+        destCountry: string;
+        totalWeight: number;
+        planeWeights: Map<string, number>;
+      }
+    >();
+
+    for (const shipment of routeShipments) {
+      if (!shipment.originAirport || !shipment.destAirport) continue;
+
+      const routeKey = `${shipment.originAirport.id}-${shipment.destAirport.id}`;
+      const weight = Number(shipment.weightKg || 0);
+      const safeWeight = Number.isFinite(weight) ? weight : 0;
+      const existing = routeMap.get(routeKey) || {
+        originCode: shipment.originAirport.iataCode,
+        originCity: shipment.originAirport.city || 'Unknown',
+        originCountry: shipment.originAirport.country || 'N/A',
+        destCode: shipment.destAirport.iataCode,
+        destCity: shipment.destAirport.city || 'Unknown',
+        destCountry: shipment.destAirport.country || 'N/A',
+        totalWeight: 0,
+        planeWeights: new Map<string, number>(),
+      };
+
+      existing.totalWeight += safeWeight;
+      const planeId = shipment.flight?.airplane?.flightNumber;
+      if (planeId) {
+        existing.planeWeights.set(planeId, (existing.planeWeights.get(planeId) || 0) + safeWeight);
+      }
+      routeMap.set(routeKey, existing);
+    }
+
+    const topRoutes = Array.from(routeMap.values())
+      .sort((a, b) => b.totalWeight - a.totalWeight)
+      .slice(0, 5)
+      .map((route) => {
+        const [topPlane] = Array.from(route.planeWeights.entries()).sort((a, b) => b[1] - a[1])[0] || [];
+
+        return {
+          destination: `${route.originCode} → ${route.destCode}`,
+          destinationDetail: `${route.originCity}, ${route.originCountry} to ${route.destCity}, ${route.destCountry}`,
+          planeId: topPlane || 'N/A',
+          totalWeight: `${(route.totalWeight / 1000).toFixed(1)} MT`,
+        };
+      });
 
     return NextResponse.json({
       success: true,
       data: {
         shipmentMapData,
-        topRoutes: topRoutesRaw.map((r) => ({
-          destination: `${r.originCode} → ${r.destCode}`,
-          destinationDetail: `${r.originCity}, ${r.originCountry} to ${r.destCity}, ${r.destCountry}`,
-          planeId: r.planeId || 'N/A',
-          totalWeight: `${(Number(r.totalWeight) / 1000).toFixed(1)} MT`,
-        })),
+        topRoutes,
       },
     });
   } catch (err) {
-    console.error('[GET /api/dashboard/analytics]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('[GET /api/dashboard/analytics]', err instanceof Error ? err.message : 'Unexpected error');
+    return NextResponse.json(
+      { success: false, error: 'Internal server error', data: EMPTY_DASHBOARD_DATA },
+      { status: 500 }
+    );
   }
 }

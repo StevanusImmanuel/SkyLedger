@@ -372,15 +372,19 @@ export function SessionNavBar() {
                   </button>
 
                   {/* Help Button */}
-                  <button
-                    className="flex h-8 w-full flex-row items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-[#94a3b8] transition-all hover:bg-[#f1f5f9] hover:text-[#1e293b]"
+                  <Link
+                    href="/faq"
+                    className={cn(
+                      "flex h-8 w-full flex-row items-center gap-2.5 px-3.5 py-2 text-xs font-medium transition-all hover:bg-[#f1f5f9] hover:text-[#1e293b]",
+                      pathname?.includes("faq") ? "bg-[#f0f4ff] text-[#1a2d5a]" : "text-[#94a3b8]"
+                    )}
                     title="Help & Support"
                   >
                     <HelpCircle className="h-4 w-4 shrink-0" strokeWidth={2} />
                     <motion.span variants={variants}>
                       Support
                     </motion.span>
-                  </button>
+                  </Link>
 
                   {/* Notification Button */}
                   <button
