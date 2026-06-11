@@ -13,7 +13,38 @@ async function getAuthUser(req: NextRequest) {
 const EMPTY_DASHBOARD_DATA = {
   shipmentMapData: [],
   topRoutes: [],
+  deliveredWeightByDate: [],
+  activeShipmentsByPriority: [],
 };
+
+const ACTIVE_DELIVERY_STATUSES = [
+  'booked',
+  'received_at_warehouse',
+  'security_cleared',
+  'manifested',
+  'departed',
+  'transshipment',
+] as const;
+
+const PRIORITY_ORDER = ['standard', 'express', 'critical', 'other'] as const;
+
+const LATE_STAGE_CARGO_STATUSES = new Set([
+  'delivered',
+  'arrived_at_destination',
+  'out_for_delivery',
+]);
+
+function getDateKey(value: Date | string | null | undefined) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+function toSafeWeight(value: unknown) {
+  const weight = Number(value || 0);
+  return Number.isFinite(weight) ? weight : 0;
+}
 
 // Fallback airport coordinates for common IATA codes
 const AIRPORT_COORDINATES: Record<string, { lat: number; lng: number }> = {
@@ -66,14 +97,7 @@ export async function GET(request: NextRequest) {
     // Get active shipments for map (based on delivery_status)
     // Active means: booked, received_at_warehouse, security_cleared, manifested, departed, transshipment
     const activeShipments = await db.query.shipments.findMany({
-      where: inArray(shipments.deliveryStatus, [
-        'booked',
-        'received_at_warehouse',
-        'security_cleared',
-        'manifested',
-        'departed',
-        'transshipment'
-      ]),
+      where: inArray(shipments.deliveryStatus, [...ACTIVE_DELIVERY_STATUSES]),
       with: {
         originAirport: true,
         destAirport: true,
@@ -155,8 +179,7 @@ export async function GET(request: NextRequest) {
       if (!shipment.originAirport || !shipment.destAirport) continue;
 
       const routeKey = `${shipment.originAirport.id}-${shipment.destAirport.id}`;
-      const weight = Number(shipment.weightKg || 0);
-      const safeWeight = Number.isFinite(weight) ? weight : 0;
+      const safeWeight = toSafeWeight(shipment.weightKg);
       const existing = routeMap.get(routeKey) || {
         originCode: shipment.originAirport.iataCode,
         originCity: shipment.originAirport.city || 'Unknown',
@@ -190,11 +213,69 @@ export async function GET(request: NextRequest) {
         };
       });
 
+    const deliveredWeightMap = new Map<string, number>();
+    const activePriorityCounts: Record<(typeof PRIORITY_ORDER)[number], number> = {
+      standard: 0,
+      express: 0,
+      critical: 0,
+      other: 0,
+    };
+
+    for (const shipment of routeShipments) {
+      const deliveryStatus = String(shipment.deliveryStatus || '').toLowerCase();
+      const shipmentStatus = String(shipment.status || '').toLowerCase();
+      const isLateStageCargo =
+        LATE_STAGE_CARGO_STATUSES.has(deliveryStatus) ||
+        LATE_STAGE_CARGO_STATUSES.has(shipmentStatus);
+
+      if (isLateStageCargo) {
+        const dateKey = getDateKey(shipment.actualDelivery ?? shipment.estimatedDelivery ?? shipment.createdAt);
+        if (dateKey) {
+          deliveredWeightMap.set(
+            dateKey,
+            (deliveredWeightMap.get(dateKey) || 0) + toSafeWeight(shipment.weightKg)
+          );
+        }
+      }
+
+      const isActiveShipment =
+        shipment.deliveryStatus !== null &&
+        ACTIVE_DELIVERY_STATUSES.includes(
+          shipment.deliveryStatus as (typeof ACTIVE_DELIVERY_STATUSES)[number]
+        ) &&
+        shipment.deliveryStatus !== 'delivered' &&
+        shipment.status !== 'delivered' &&
+        shipment.status !== 'cancelled';
+
+      if (isActiveShipment) {
+        const normalizedPriority = String(shipment.priority || 'other').toLowerCase();
+        const priority = PRIORITY_ORDER.includes(normalizedPriority as (typeof PRIORITY_ORDER)[number])
+          ? (normalizedPriority as (typeof PRIORITY_ORDER)[number])
+          : 'other';
+        activePriorityCounts[priority] += 1;
+      }
+    }
+
+    const deliveredWeightByDate = Array.from(deliveredWeightMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, weightKg]) => ({
+        date,
+        weightKg: Number(weightKg.toFixed(3)),
+        weightMt: Number((weightKg / 1000).toFixed(1)),
+      }));
+
+    const activeShipmentsByPriority = PRIORITY_ORDER.map((priority) => ({
+      priority,
+      count: activePriorityCounts[priority],
+    }));
+
     return NextResponse.json({
       success: true,
       data: {
         shipmentMapData,
         topRoutes,
+        deliveredWeightByDate,
+        activeShipmentsByPriority,
       },
     });
   } catch (err) {

@@ -1375,7 +1375,7 @@
 /* --- Charts Section --- */
 .sl-charts-grid {
   display: grid;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -1385,6 +1385,26 @@
   border-radius: 12px;
   padding: 20px;
   border: 1px solid #e8edf4;
+}
+
+.sl-dashboard-chart-body {
+  height: 240px;
+  margin-top: 12px;
+}
+
+.sl-chart-empty {
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #dbe3ee;
+  border-radius: 10px;
+  margin-top: 12px;
+  color: #64748b;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+  padding: 18px;
 }
 
 .sl-chart-header {

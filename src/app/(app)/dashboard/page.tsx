@@ -2,6 +2,17 @@
 
 import { Suspense, useCallback, useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { ShipmentMap } from '@/components/dashboard/ShipmentMap';
 import { RouteTableSkeleton, ChartSkeleton } from '@/components/ui/skeletons';
 import { PageTitle } from '@/components/ui/page-title';
@@ -26,6 +37,15 @@ type DashboardData = {
     planeId: string;
     totalWeight: string;
   }>;
+  deliveredWeightByDate: Array<{
+    date: string;
+    weightKg: number;
+    weightMt?: number;
+  }>;
+  activeShipmentsByPriority: Array<{
+    priority: string;
+    count: number;
+  }>;
 };
 
 type DashboardApiResponse = {
@@ -36,6 +56,111 @@ type DashboardApiResponse = {
 
 const DASHBOARD_ERROR_MESSAGE = 'Dashboard data is temporarily unavailable.';
 
+function formatPriorityLabel(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function DeliveredWeightChart({ data }: { data: DashboardData['deliveredWeightByDate'] }) {
+  if (data.length === 0) {
+    return (
+      <div className="sl-chart-card">
+        <div className="sl-chart-header">
+          <div>
+            <p className="sl-chart-title">Late-Stage Cargo Weight</p>
+            <p className="sl-chart-subtitle">Total shipment weight for delivered, arrived, and out-for-delivery cargo by date</p>
+          </div>
+        </div>
+        <div className="sl-chart-empty">No late-stage cargo weight data available yet.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sl-chart-card">
+      <div className="sl-chart-header">
+        <div>
+          <p className="sl-chart-title">Late-Stage Cargo Weight</p>
+          <p className="sl-chart-subtitle">Total shipment weight for delivered, arrived, and out-for-delivery cargo by date</p>
+        </div>
+      </div>
+      <div className="sl-dashboard-chart-body">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="deliveredWeightFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#1a2d5a" stopOpacity={0.24} />
+                <stop offset="95%" stopColor="#1a2d5a" stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke="#e8edf4" strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} width={42} />
+            <Tooltip
+              formatter={(value) => [`${Number(value).toLocaleString()} kg`, 'Weight']}
+              labelFormatter={(label) => `Date: ${label}`}
+            />
+            <Area
+              type="monotone"
+              dataKey="weightKg"
+              stroke="#1a2d5a"
+              strokeWidth={2}
+              fill="url(#deliveredWeightFill)"
+              dot={{ r: 3, strokeWidth: 2 }}
+              activeDot={{ r: 5 }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function ActivePriorityChart({ data }: { data: DashboardData['activeShipmentsByPriority'] }) {
+  const visiblePriorityData = data.filter((item) => item.priority !== 'other');
+  const totalActive = visiblePriorityData.reduce((sum, item) => sum + item.count, 0);
+
+  if (visiblePriorityData.length === 0 || totalActive === 0) {
+    return (
+      <div className="sl-chart-card">
+        <div className="sl-chart-header">
+          <div>
+            <p className="sl-chart-title">Active Shipments by Priority</p>
+            <p className="sl-chart-subtitle">Current active cargo workload grouped by shipment priority</p>
+          </div>
+        </div>
+        <div className="sl-chart-empty">No active priority shipment data available.</div>
+      </div>
+    );
+  }
+
+  const chartData = visiblePriorityData.map((item) => ({
+    ...item,
+    label: formatPriorityLabel(item.priority),
+  }));
+
+  return (
+    <div className="sl-chart-card">
+      <div className="sl-chart-header">
+        <div>
+          <p className="sl-chart-title">Active Shipments by Priority</p>
+          <p className="sl-chart-subtitle">Current active cargo workload grouped by shipment priority</p>
+        </div>
+      </div>
+      <div className="sl-dashboard-chart-body">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke="#e8edf4" strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} width={34} />
+            <Tooltip formatter={(value) => [Number(value).toLocaleString(), 'Shipments']} />
+            <Bar dataKey="count" fill="#1a2d5a" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 function DashboardContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
@@ -43,6 +168,8 @@ function DashboardContent() {
   const hasDataRef = useRef(false);
 
   const shipments = data?.shipmentMapData || [];
+  const deliveredWeightByDate = data?.deliveredWeightByDate || [];
+  const activeShipmentsByPriority = data?.activeShipmentsByPriority || [];
 
   const fetchDashboard = useCallback(async () => {
     if (!hasDataRef.current) setIsLoading(true);
@@ -122,6 +249,18 @@ function DashboardContent() {
         <ChartSkeleton />
       ) : (
         <ShipmentMap shipments={shipments} />
+      )}
+
+      {isLoading ? (
+        <div className="sl-charts-grid">
+          <ChartSkeleton />
+          <ChartSkeleton />
+        </div>
+      ) : (
+        <div className="sl-charts-grid">
+          <DeliveredWeightChart data={deliveredWeightByDate} />
+          <ActivePriorityChart data={activeShipmentsByPriority} />
+        </div>
       )}
 
       {/* Top Operational Routes Table */}
