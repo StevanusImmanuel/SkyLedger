@@ -10,6 +10,25 @@ import {
 import { eq, desc, and, or, ilike, count, gte, lte, SQL, inArray } from 'drizzle-orm';
 import { logActivity } from '@/lib/activity-logger';
 
+type DeliveryStatus = NonNullable<typeof shipments.$inferSelect.deliveryStatus>;
+
+const DELIVERY_STATUS_VALUES: DeliveryStatus[] = [
+  'booked',
+  'received_at_warehouse',
+  'security_cleared',
+  'manifested',
+  'departed',
+  'transshipment',
+  'arrived_at_destination',
+  'out_for_delivery',
+  'ready_for_pickup',
+  'delivered',
+];
+
+function isDeliveryStatus(value: string): value is DeliveryStatus {
+  return DELIVERY_STATUS_VALUES.includes(value as DeliveryStatus);
+}
+
 async function getAuthUser(req: NextRequest) {
   const token = req.cookies.get('terminal_session')?.value;
   if (!token) return null;
@@ -103,10 +122,12 @@ export async function GET(request: NextRequest) {
           ])
         );
       } else if (deliveryStatusFilter.includes(',')) {
-        const statuses = deliveryStatusFilter.split(',') as any[];
-        conditions.push(inArray(shipments.deliveryStatus, statuses));
-      } else {
-        conditions.push(eq(shipments.deliveryStatus, deliveryStatusFilter as any));
+        const statuses = deliveryStatusFilter.split(',').filter(isDeliveryStatus);
+        if (statuses.length > 0) {
+          conditions.push(inArray(shipments.deliveryStatus, statuses));
+        }
+      } else if (isDeliveryStatus(deliveryStatusFilter)) {
+        conditions.push(eq(shipments.deliveryStatus, deliveryStatusFilter));
       }
     }
 
@@ -171,7 +192,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: rows, total });
   } catch (error) {
     console.error('[GET /api/shipments]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to load shipments. Please try again.' }, { status: 500 });
   }
 }
 
@@ -391,6 +412,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: newShipment }, { status: 201 });
   } catch (err) {
     console.error('[POST /api/shipments]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to save shipment. Please check your input and try again.' },
+      { status: 500 }
+    );
   }
 }

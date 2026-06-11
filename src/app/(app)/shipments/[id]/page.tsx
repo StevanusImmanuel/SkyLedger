@@ -200,11 +200,12 @@ export default function ShipmentDetailPage() {
         }
 
         setShipment(data.data);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Failed to fetch shipment detail:", err);
         if (isMounted) {
+          const message = err instanceof Error ? err.message : "Unable to load shipment details.";
           setShipment(null);
-          setError(err.message || "Unable to load shipment details.");
+          setError(message);
         }
       } finally {
         if (isMounted) setIsLoading(false);

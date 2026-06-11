@@ -14,7 +14,6 @@ import {
   Calendar,
   Clock,
   MapPin,
-  ChevronRight
 } from "lucide-react";
 import {
   calculateShippingFeeFromInput,
@@ -275,11 +274,12 @@ export default function PublicTrackingDetailPage() {
         }
 
         setShipment(data.data);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Failed to fetch public tracking detail:", err);
         if (isMounted) {
+          const message = err instanceof Error ? err.message : "An unexpected network error occurred.";
           setShipment(null);
-          setError(err.message || "An unexpected network error occurred.");
+          setError(message);
         }
       } finally {
         if (isMounted) setIsLoading(false);
@@ -405,7 +405,18 @@ export default function PublicTrackingDetailPage() {
   const originAirport = shipment.originAirport;
   const destAirport = shipment.destAirport;
   const weightUnit = details.weightUnit || "kg";
-  const events = shipment.events || [];
+  const events = shipment.events?.length
+    ? shipment.events
+    : [
+        {
+          id: `fallback-${shipment.id}`,
+          shipmentId: shipment.id,
+          status: shipment.status,
+          location: null,
+          notes: "Shipment created - initial status",
+          occurredAt: shipment.createdAt,
+        },
+      ];
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-[#f8fafc] py-10 px-4 sm:px-6 lg:px-8">
@@ -498,12 +509,7 @@ export default function PublicTrackingDetailPage() {
                 <h2 className="text-sm font-black uppercase tracking-[0.4px]">Shipment Timeline</h2>
               </div>
 
-              {events.length === 0 ? (
-                <div className="rounded-lg border border-[#e8edf4] bg-[#f8fafc] p-6 text-center">
-                  <p className="text-xs font-semibold text-[#64748b]">No tracking updates posted yet.</p>
-                </div>
-              ) : (
-                <div className="relative border-l border-slate-200 pl-6 space-y-8 ml-2">
+              <div className="relative border-l border-slate-200 pl-6 space-y-8 ml-2">
                   {events.map((event, index) => {
                     const isLatest = index === 0;
                     return (
@@ -548,8 +554,7 @@ export default function PublicTrackingDetailPage() {
                       </div>
                     );
                   })}
-                </div>
-              )}
+              </div>
             </section>
           </div>
         </div>
