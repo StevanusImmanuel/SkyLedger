@@ -1,13 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { shipments, flights, airports, airplanes } from '@/lib/db/schema';
+import { shipments } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
-import { sql, eq, desc, count, inArray } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 
 async function getAuthUser(req: NextRequest) {
   const token = req.cookies.get('terminal_session')?.value;
   if (!token) return null;
   return getSessionUser(token);
+}
+
+const EMPTY_DASHBOARD_DATA = {
+  shipmentMapData: [],
+  topRoutes: [],
+  deliveredWeightByDate: [],
+  activeShipmentsByPriority: [],
+};
+
+const ACTIVE_DELIVERY_STATUSES = [
+  'booked',
+  'received_at_warehouse',
+  'security_cleared',
+  'manifested',
+  'departed',
+  'transshipment',
+] as const;
+
+const PRIORITY_ORDER = ['standard', 'express', 'critical', 'other'] as const;
+
+const LATE_STAGE_CARGO_STATUSES = new Set([
+  'delivered',
+  'arrived_at_destination',
+  'out_for_delivery',
+]);
+
+function getDateKey(value: Date | string | null | undefined) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+function toSafeWeight(value: unknown) {
+  const weight = Number(value || 0);
+  return Number.isFinite(weight) ? weight : 0;
 }
 
 // Fallback airport coordinates for common IATA codes
@@ -52,36 +88,21 @@ const AIRPORT_COORDINATES: Record<string, { lat: number; lng: number }> = {
 };
 
 export async function GET(request: NextRequest) {
-  const user = await getAuthUser(request);
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   try {
+    const user = await getAuthUser(request);
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Get active shipments for map (based on delivery_status)
     // Active means: booked, received_at_warehouse, security_cleared, manifested, departed, transshipment
     const activeShipments = await db.query.shipments.findMany({
-      where: inArray(shipments.deliveryStatus, [
-        'booked',
-        'received_at_warehouse',
-        'security_cleared',
-        'manifested',
-        'departed',
-        'transshipment'
-      ]),
+      where: inArray(shipments.deliveryStatus, [...ACTIVE_DELIVERY_STATUSES]),
       with: {
         originAirport: true,
         destAirport: true,
       },
     });
-
-    console.log('[Dashboard] Total active shipments found:', activeShipments.length);
-    if (activeShipments.length > 0) {
-      console.log('[Dashboard] First shipment:', {
-        awb: activeShipments[0].awbNumber,
-        deliveryStatus: activeShipments[0].deliveryStatus,
-        originAirport: activeShipments[0].originAirport?.iataCode,
-        destAirport: activeShipments[0].destAirport?.iataCode,
-      });
-    }
 
     // Map shipments with coordinates (use fallback if database doesn't have them)
     const shipmentMapData = activeShipments
@@ -104,19 +125,13 @@ export async function GET(request: NextRequest) {
           ? Number(s.destAirport!.longitude)
           : AIRPORT_COORDINATES[destIata]?.lng;
 
-        console.log('[Dashboard] Processing shipment:', {
-          awb: s.awbNumber,
-          originIata,
-          destIata,
-          originLat,
-          originLng,
-          destLat,
-          destLng,
-          hasCoords: !!(originLat && originLng && destLat && destLng)
-        });
-
         // Only include if we have valid coordinates
-        if (!originLat || !originLng || !destLat || !destLng) {
+        if (
+          !Number.isFinite(originLat) ||
+          !Number.isFinite(originLng) ||
+          !Number.isFinite(destLat) ||
+          !Number.isFinite(destLng)
+        ) {
           return null;
         }
 
@@ -134,64 +149,140 @@ export async function GET(request: NextRequest) {
       })
       .filter((s): s is NonNullable<typeof s> => s !== null);
 
-    console.log('[Dashboard] Shipments with valid coordinates:', shipmentMapData.length);
-    console.log('[Dashboard] Shipment map data:', shipmentMapData);
+    const routeShipments = await db.query.shipments.findMany({
+      with: {
+        originAirport: true,
+        destAirport: true,
+        flight: {
+          with: {
+            airplane: true,
+          },
+        },
+      },
+    });
 
-    // Top 5 routes by total shipment weight
-    // For each route, get the plane that carries the most weight
-    const topRoutesRaw = await db
-      .select({
-        originCode: airports.iataCode,
-        originCity: airports.city,
-        originCountry: airports.country,
-        destCode: sql<string>`dest_airport.iata_code`,
-        destCity: sql<string>`dest_airport.city`,
-        destCountry: sql<string>`dest_airport.country`,
-        planeId: sql<string>`(
-          SELECT ap.flight_number
-          FROM shipments s2
-          LEFT JOIN flights f2 ON s2.flight_id = f2.id
-          LEFT JOIN airplanes ap ON f2.airplane_id = ap.airplane_id
-          WHERE s2.origin_airport_id = ${shipments.originAirportId}
-            AND s2.dest_airport_id = ${shipments.destAirportId}
-            AND ap.flight_number IS NOT NULL
-          GROUP BY ap.flight_number
-          ORDER BY SUM(CAST(s2.weight_kg AS NUMERIC)) DESC
-          LIMIT 1
-        )`,
-        totalWeight: sql<number>`COALESCE(SUM(CAST(${shipments.weightKg} AS NUMERIC)), 0)`,
-        shipmentCount: count(),
-      })
-      .from(shipments)
-      .innerJoin(airports, eq(shipments.originAirportId, airports.id))
-      .innerJoin(sql`airports AS dest_airport`, sql`${shipments.destAirportId} = dest_airport.id`)
-      .groupBy(
-        airports.iataCode,
-        airports.city,
-        airports.country,
-        sql`dest_airport.iata_code`,
-        sql`dest_airport.city`,
-        sql`dest_airport.country`,
-        shipments.originAirportId,
-        shipments.destAirportId
-      )
-      .orderBy(desc(sql`COALESCE(SUM(CAST(${shipments.weightKg} AS NUMERIC)), 0)`))
-      .limit(5);
+    const routeMap = new Map<
+      string,
+      {
+        originCode: string;
+        originCity: string;
+        originCountry: string;
+        destCode: string;
+        destCity: string;
+        destCountry: string;
+        totalWeight: number;
+        planeWeights: Map<string, number>;
+      }
+    >();
+
+    for (const shipment of routeShipments) {
+      if (!shipment.originAirport || !shipment.destAirport) continue;
+
+      const routeKey = `${shipment.originAirport.id}-${shipment.destAirport.id}`;
+      const safeWeight = toSafeWeight(shipment.weightKg);
+      const existing = routeMap.get(routeKey) || {
+        originCode: shipment.originAirport.iataCode,
+        originCity: shipment.originAirport.city || 'Unknown',
+        originCountry: shipment.originAirport.country || 'N/A',
+        destCode: shipment.destAirport.iataCode,
+        destCity: shipment.destAirport.city || 'Unknown',
+        destCountry: shipment.destAirport.country || 'N/A',
+        totalWeight: 0,
+        planeWeights: new Map<string, number>(),
+      };
+
+      existing.totalWeight += safeWeight;
+      const planeId = shipment.flight?.airplane?.flightNumber;
+      if (planeId) {
+        existing.planeWeights.set(planeId, (existing.planeWeights.get(planeId) || 0) + safeWeight);
+      }
+      routeMap.set(routeKey, existing);
+    }
+
+    const topRoutes = Array.from(routeMap.values())
+      .sort((a, b) => b.totalWeight - a.totalWeight)
+      .slice(0, 5)
+      .map((route) => {
+        const [topPlane] = Array.from(route.planeWeights.entries()).sort((a, b) => b[1] - a[1])[0] || [];
+
+        return {
+          destination: `${route.originCode} → ${route.destCode}`,
+          destinationDetail: `${route.originCity}, ${route.originCountry} to ${route.destCity}, ${route.destCountry}`,
+          planeId: topPlane || 'N/A',
+          totalWeight: `${(route.totalWeight / 1000).toFixed(1)} MT`,
+        };
+      });
+
+    const deliveredWeightMap = new Map<string, number>();
+    const activePriorityCounts: Record<(typeof PRIORITY_ORDER)[number], number> = {
+      standard: 0,
+      express: 0,
+      critical: 0,
+      other: 0,
+    };
+
+    for (const shipment of routeShipments) {
+      const deliveryStatus = String(shipment.deliveryStatus || '').toLowerCase();
+      const shipmentStatus = String(shipment.status || '').toLowerCase();
+      const isLateStageCargo =
+        LATE_STAGE_CARGO_STATUSES.has(deliveryStatus) ||
+        LATE_STAGE_CARGO_STATUSES.has(shipmentStatus);
+
+      if (isLateStageCargo) {
+        const dateKey = getDateKey(shipment.actualDelivery ?? shipment.estimatedDelivery ?? shipment.createdAt);
+        if (dateKey) {
+          deliveredWeightMap.set(
+            dateKey,
+            (deliveredWeightMap.get(dateKey) || 0) + toSafeWeight(shipment.weightKg)
+          );
+        }
+      }
+
+      const isActiveShipment =
+        shipment.deliveryStatus !== null &&
+        ACTIVE_DELIVERY_STATUSES.includes(
+          shipment.deliveryStatus as (typeof ACTIVE_DELIVERY_STATUSES)[number]
+        ) &&
+        shipment.deliveryStatus !== 'delivered' &&
+        shipment.status !== 'delivered' &&
+        shipment.status !== 'cancelled';
+
+      if (isActiveShipment) {
+        const normalizedPriority = String(shipment.priority || 'other').toLowerCase();
+        const priority = PRIORITY_ORDER.includes(normalizedPriority as (typeof PRIORITY_ORDER)[number])
+          ? (normalizedPriority as (typeof PRIORITY_ORDER)[number])
+          : 'other';
+        activePriorityCounts[priority] += 1;
+      }
+    }
+
+    const deliveredWeightByDate = Array.from(deliveredWeightMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, weightKg]) => ({
+        date,
+        weightKg: Number(weightKg.toFixed(3)),
+        weightMt: Number((weightKg / 1000).toFixed(1)),
+      }));
+
+    const activeShipmentsByPriority = PRIORITY_ORDER.map((priority) => ({
+      priority,
+      count: activePriorityCounts[priority],
+    }));
 
     return NextResponse.json({
       success: true,
       data: {
         shipmentMapData,
-        topRoutes: topRoutesRaw.map((r) => ({
-          destination: `${r.originCode} → ${r.destCode}`,
-          destinationDetail: `${r.originCity}, ${r.originCountry} to ${r.destCity}, ${r.destCountry}`,
-          planeId: r.planeId || 'N/A',
-          totalWeight: `${(Number(r.totalWeight) / 1000).toFixed(1)} MT`,
-        })),
+        topRoutes,
+        deliveredWeightByDate,
+        activeShipmentsByPriority,
       },
     });
   } catch (err) {
-    console.error('[GET /api/dashboard/analytics]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('[GET /api/dashboard/analytics]', err instanceof Error ? err.message : 'Unexpected error');
+    return NextResponse.json(
+      { success: false, error: 'Internal server error', data: EMPTY_DASHBOARD_DATA },
+      { status: 500 }
+    );
   }
 }

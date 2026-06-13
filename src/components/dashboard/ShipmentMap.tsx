@@ -30,9 +30,6 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
   const markersRef = useRef<any[]>([]);
   const lastShipmentIdsRef = useRef<string>('');
 
-  console.log('[ShipmentMap] Received shipments:', shipments.length);
-  console.log('[ShipmentMap] Shipments data:', shipments);
-
   useEffect(() => {
     setIsClient(true);
     // Import Leaflet CSS dynamically
@@ -42,14 +39,10 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
   }, []);
 
   useEffect(() => {
-    console.log('[ShipmentMap init] Starting map initialization, isClient:', isClient, 'hasContainer:', !!mapContainerRef.current, 'hasMap:', !!mapRef.current);
-
     if (!isClient || !mapContainerRef.current || mapRef.current) return;
 
     // Dynamically import Leaflet only on client side
     import('leaflet').then((L) => {
-      console.log('[ShipmentMap init] Leaflet imported');
-
       if (!mapContainerRef.current || mapRef.current) return;
 
       // Initialize map
@@ -61,7 +54,6 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
       });
 
       mapRef.current = map;
-      console.log('[ShipmentMap init] Map initialized successfully');
 
       // Add tile layer
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -86,38 +78,25 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
   }, [isClient]);
 
   useEffect(() => {
-    console.log('[ShipmentMap useEffect] Running with:', {
-      isMapReady,
-      shipmentsLength: shipments.length
-    });
-
     if (!isMapReady || shipments.length === 0) {
-      console.log('[ShipmentMap useEffect] Early return - conditions not met');
       return;
     }
 
     // Check if shipments have actually changed
     const currentShipmentIds = shipments.map(s => s.id).sort().join(',');
     if (currentShipmentIds === lastShipmentIdsRef.current) {
-      console.log('[ShipmentMap useEffect] Shipments unchanged, skipping re-render');
       return;
     }
 
-    console.log('[ShipmentMap useEffect] Shipments changed, re-rendering planes');
     lastShipmentIdsRef.current = currentShipmentIds;
-
-    console.log('[ShipmentMap useEffect] Starting to render planes...');
 
     const map = mapRef.current;
     if (!map) {
-      console.log('[ShipmentMap useEffect] Map not ready yet');
       return;
     }
 
     // Import Leaflet dynamically
     import('leaflet').then((L) => {
-      console.log('[ShipmentMap] Leaflet loaded, rendering', shipments.length, 'shipments');
-
       // Cancel previous animations
       animationFramesRef.current.forEach(id => cancelAnimationFrame(id));
       animationFramesRef.current = [];
@@ -137,8 +116,6 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
         }
       });
 
-      console.log('[ShipmentMap] Cleared previous layers');
-
       // Create plane icon
       const planeIcon = L.divIcon({
         html: `<svg width="24" height="24" viewBox="0 0 24 24" fill="#1a2d5a" stroke="#fff" stroke-width="1.5">
@@ -156,8 +133,6 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
         const origin: [number, number] = [shipment.originLat, shipment.originLng];
         const dest: [number, number] = [shipment.destLat, shipment.destLng];
 
-        console.log('[ShipmentMap] Creating route for', shipment.awbNumber, 'from', origin, 'to', dest);
-
         bounds.push(origin, dest);
 
         // Draw flight path
@@ -170,8 +145,6 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
           opacity: 0.6,
           dashArray: '5, 10',
         }).addTo(map);
-
-        console.log('[ShipmentMap] Flight path added');
 
         // Create animated plane marker
         const marker = L.marker(origin, { icon: planeIcon })
@@ -190,8 +163,6 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
             </div>
           `);
 
-        console.log('[ShipmentMap] Plane marker created at', origin);
-
         // Store marker in ref
         markersRef.current.push(marker);
 
@@ -203,17 +174,11 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
         // Animate plane movement
         const duration = 30000; // 30 seconds for full journey (moderate pace)
         let animationStartTime = Date.now() + (index * 2000); // Stagger start times
-        let frameCount = 0;
 
         const animate = () => {
           const now = Date.now();
           const elapsed = now - animationStartTime;
           const progress = Math.min(elapsed / duration, 1);
-
-          frameCount++;
-          if (frameCount % 60 === 0) { // Log every 60 frames (~1 second)
-            console.log('[ShipmentMap] Animating', shipment.awbNumber, 'progress:', (progress * 100).toFixed(1) + '%');
-          }
 
           // Linear interpolation for smooth, steady movement
           const currentLat = origin[0] + (dest[0] - origin[0]) * progress;
@@ -235,12 +200,9 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
             animationFramesRef.current.push(frameId);
           } else {
             // Reached destination - loop back to origin
-            console.log('[ShipmentMap] Animation complete for', shipment.awbNumber, '- restarting in 2s');
             setTimeout(() => {
               marker.setLatLng(origin);
               animationStartTime = Date.now(); // Reset start time for new loop
-              frameCount = 0;
-              console.log('[ShipmentMap] Restarting animation for', shipment.awbNumber);
               const newFrameId = requestAnimationFrame(animate);
               animationFramesRef.current.push(newFrameId);
             }, 2000); // Wait 2 seconds at destination before restarting
@@ -249,10 +211,8 @@ function ShipmentMapComponent({ shipments }: ShipmentMapProps) {
 
         // Start animation after initial delay
         const delayMs = index * 2000;
-        console.log('[ShipmentMap] Scheduling animation for', shipment.awbNumber, 'with delay', delayMs, 'ms');
 
         setTimeout(() => {
-          console.log('[ShipmentMap] Starting animation NOW for', shipment.awbNumber);
           const frameId = requestAnimationFrame(animate);
           animationFramesRef.current.push(frameId);
         }, delayMs);
