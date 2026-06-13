@@ -28,7 +28,8 @@ export async function getSessionUser(token: string) {
     where: and(eq(sessions.token, token), gt(sessions.expiresAt, new Date())),
     with: { user: true },
   });
-  return result?.user ?? null;
+  if (!result?.user || !result.user.isActive) return null;
+  return result.user;
 }
 
 export async function deleteSession(token: string) {

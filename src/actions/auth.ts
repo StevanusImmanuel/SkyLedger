@@ -14,6 +14,7 @@ import { loginSchema, registerSchema } from '@/lib/validations/auth';
 import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
+import { isRateLimited } from '@/lib/rate-limit';
 
 function generateSkyledgerId(): string {
   const random = Math.floor(1000 + Math.random() * 9000);
@@ -22,6 +23,12 @@ function generateSkyledgerId(): string {
 }
 
 export async function loginAction(_prev: unknown, formData: FormData) {
+  const rateLimitHdrs = await headers();
+  const rateLimitIp = rateLimitHdrs.get('x-forwarded-for')?.split(',')[0].trim() || rateLimitHdrs.get('x-real-ip') || 'anonymous';
+  if (isRateLimited(rateLimitIp, 10, 60 * 1000)) {
+    return { error: 'Too many authentication attempts. Please try again later.' };
+  }
+
   const parsed = loginSchema.safeParse({
     email: formData.get('email'),
     password: formData.get('password'),
@@ -49,6 +56,12 @@ export async function loginAction(_prev: unknown, formData: FormData) {
 }
 
 export async function registerAction(_prev: unknown, formData: FormData) {
+  const rateLimitHdrs = await headers();
+  const rateLimitIp = rateLimitHdrs.get('x-forwarded-for')?.split(',')[0].trim() || rateLimitHdrs.get('x-real-ip') || 'anonymous';
+  if (isRateLimited(rateLimitIp, 10, 60 * 1000)) {
+    return { error: 'Too many registration attempts. Please try again later.' };
+  }
+
   const parsed = registerSchema.safeParse({
     name: formData.get('name'),
     email: formData.get('email'),

@@ -6,6 +6,7 @@ import { createSession, deleteSession } from '@/lib/auth/session';
 import { loginSchema, registerSchema } from '@/lib/validations/auth';
 import { eq } from 'drizzle-orm';
 import { logActivity } from '@/lib/activity-logger';
+import { isRateLimited } from '@/lib/rate-limit';
 
 function generateSkyledgerId(): string {
   const random = Math.floor(1000 + Math.random() * 9000);
@@ -24,6 +25,14 @@ function sessionCookieOptions(expiresAt: Date) {
 
 export async function POST(request: NextRequest) {
   const action = request.nextUrl.searchParams.get('action');
+
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0].trim() || 
+             request.headers.get('x-real-ip') || 
+             'anonymous';
+
+  if (isRateLimited(ip, 10, 60 * 1000)) { // Limit to 10 auth attempts per minute per IP
+    return NextResponse.json({ error: 'Too many authentication attempts. Please try again later.' }, { status: 429 });
+  }
 
   try {
     if (action === 'login') {
