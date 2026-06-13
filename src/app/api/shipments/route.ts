@@ -179,6 +179,10 @@ export async function POST(request: NextRequest) {
   const user = await getAuthUser(request);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  if (user.role !== 'admin' && user.role !== 'operator') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
 
@@ -266,108 +270,113 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Destination airport (${destIata}) has invalid coordinates` }, { status: 400 });
     }
 
-    // Find or create a flight for the airplane
-    let availableFlight = await db.query.flights.findFirst({
-      where: and(
-        eq(flights.airplaneId, airplaneId),
-        eq(flights.status, 'scheduled')
-      ),
-    });
+    // Run writing operations in a database transaction
+    const newShipment = await db.transaction(async (tx) => {
+      // Find or create a flight for the airplane
+      let availableFlight = await tx.query.flights.findFirst({
+        where: and(
+          eq(flights.airplaneId, airplaneId),
+          eq(flights.status, 'scheduled')
+        ),
+      });
 
-    // If no scheduled flight exists, create one
-    if (!availableFlight) {
-      const [newFlight] = await db
-        .insert(flights)
+      // If no scheduled flight exists, create one
+      if (!availableFlight) {
+        const [newFlight] = await tx
+          .insert(flights)
+          .values({
+            airlineId: airlineId,
+            airplaneId: airplaneId,
+            originAirportId: originAirport.id,
+            destAirportId: destAirport.id,
+            departureTime: shippingDate ? new Date(shippingDate) : new Date(),
+            arrivalTime: shippingDate ? new Date(new Date(shippingDate).getTime() + 3 * 24 * 60 * 60 * 1000) : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+            status: 'scheduled',
+          })
+          .returning();
+        availableFlight = newFlight;
+      }
+
+      // Generate and verify AWB uniqueness (avoid duplicate tracking numbers)
+      let awbNumber = '';
+      let isUnique = false;
+      for (let i = 0; i < 5; i++) {
+        awbNumber = generateAwbNumber(airline.airlineCode);
+        const existing = await tx.query.shipments.findFirst({
+          where: eq(shipments.awbNumber, awbNumber),
+        });
+        if (!existing) {
+          isUnique = true;
+          break;
+        }
+      }
+
+      if (!isUnique) {
+        throw new Error('Failed to generate a unique Air Waybill tracking number. Please try again.');
+      }
+
+      type ShipmentStatus = NonNullable<typeof shipments.$inferInsert.status>;
+      type DeliveryStatusEnum = NonNullable<typeof shipments.$inferInsert.deliveryStatus>;
+
+      const deliveryStatusMap: Record<string, { shipmentStatus: ShipmentStatus; deliveryStatusEnum: DeliveryStatusEnum }> = {
+        'Booked': { shipmentStatus: 'pending', deliveryStatusEnum: 'booked' },
+        'Received at Warehouse': { shipmentStatus: 'pending', deliveryStatusEnum: 'received_at_warehouse' },
+        'Security Cleared': { shipmentStatus: 'pending', deliveryStatusEnum: 'security_cleared' },
+        'Manifested': { shipmentStatus: 'pending', deliveryStatusEnum: 'manifested' },
+        'Departed': { shipmentStatus: 'in_transit', deliveryStatusEnum: 'departed' },
+        'Transshipment': { shipmentStatus: 'in_transit', deliveryStatusEnum: 'transshipment' },
+        'Arrived at Destination Airports': { shipmentStatus: 'processing', deliveryStatusEnum: 'arrived_at_destination' },
+        'Out for Delivery': { shipmentStatus: 'processing', deliveryStatusEnum: 'out_for_delivery' },
+        'Ready for Pickup': { shipmentStatus: 'processing', deliveryStatusEnum: 'ready_for_pickup' },
+        'Delivered': { shipmentStatus: 'delivered', deliveryStatusEnum: 'delivered' },
+      };
+
+      let shipmentStatus: ShipmentStatus = 'pending';
+      let deliveryStatusEnum: DeliveryStatusEnum = 'booked';
+      if (deliveryStatus && deliveryStatusMap[deliveryStatus]) {
+        shipmentStatus = deliveryStatusMap[deliveryStatus].shipmentStatus;
+        deliveryStatusEnum = deliveryStatusMap[deliveryStatus].deliveryStatusEnum;
+      }
+
+      const [insertedShipment] = await tx
+        .insert(shipments)
         .values({
-          airlineId: airlineId,
-          airplaneId: airplaneId,
+          awbNumber,
+          flightId: availableFlight?.id,
           originAirportId: originAirport.id,
           destAirportId: destAirport.id,
-          departureTime: shippingDate ? new Date(shippingDate) : new Date(),
-          arrivalTime: shippingDate ? new Date(new Date(shippingDate).getTime() + 3 * 24 * 60 * 60 * 1000) : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-          status: 'scheduled',
+          priority,
+          productType,
+          quantity: 1,
+          weightKg: String(productWeightValue),
+          status: shipmentStatus,
+          deliveryStatus: deliveryStatusEnum,
+          notes: buildShipmentNotes({
+            sender,
+            receiver,
+            telpNumber,
+            originAddress,
+            destinationAddress,
+            deliveryType,
+            shippingFee: formatShippingFee(shippingFee),
+            weightUnit,
+            shippingDate,
+            notes,
+          }),
+          createdBy: user.id,
+          estimatedDelivery: shippingDate ? new Date(new Date(shippingDate).getTime() + 3 * 24 * 60 * 60 * 1000) : undefined,
         })
         .returning();
-      availableFlight = newFlight;
-    }
 
-    // Generate and verify AWB uniqueness (avoid duplicate tracking numbers)
-    let awbNumber = '';
-    let isUnique = false;
-    for (let i = 0; i < 5; i++) {
-      awbNumber = generateAwbNumber(airline.airlineCode);
-      const existing = await db.query.shipments.findFirst({
-        where: eq(shipments.awbNumber, awbNumber),
-      });
-      if (!existing) {
-        isUnique = true;
-        break;
-      }
-    }
-
-    if (!isUnique) {
-      return NextResponse.json({ error: 'Failed to generate a unique Air Waybill tracking number. Please try again.' }, { status: 409 });
-    }
-
-    type ShipmentStatus = NonNullable<typeof shipments.$inferInsert.status>;
-    type DeliveryStatusEnum = NonNullable<typeof shipments.$inferInsert.deliveryStatus>;
-
-    const deliveryStatusMap: Record<string, { shipmentStatus: ShipmentStatus; deliveryStatusEnum: DeliveryStatusEnum }> = {
-      'Booked': { shipmentStatus: 'pending', deliveryStatusEnum: 'booked' },
-      'Received at Warehouse': { shipmentStatus: 'pending', deliveryStatusEnum: 'received_at_warehouse' },
-      'Security Cleared': { shipmentStatus: 'pending', deliveryStatusEnum: 'security_cleared' },
-      'Manifested': { shipmentStatus: 'pending', deliveryStatusEnum: 'manifested' },
-      'Departed': { shipmentStatus: 'in_transit', deliveryStatusEnum: 'departed' },
-      'Transshipment': { shipmentStatus: 'in_transit', deliveryStatusEnum: 'transshipment' },
-      'Arrived at Destination Airports': { shipmentStatus: 'processing', deliveryStatusEnum: 'arrived_at_destination' },
-      'Out for Delivery': { shipmentStatus: 'processing', deliveryStatusEnum: 'out_for_delivery' },
-      'Ready for Pickup': { shipmentStatus: 'processing', deliveryStatusEnum: 'ready_for_pickup' },
-      'Delivered': { shipmentStatus: 'delivered', deliveryStatusEnum: 'delivered' },
-    };
-
-    let shipmentStatus: ShipmentStatus = 'pending';
-    let deliveryStatusEnum: DeliveryStatusEnum = 'booked';
-    if (deliveryStatus && deliveryStatusMap[deliveryStatus]) {
-      shipmentStatus = deliveryStatusMap[deliveryStatus].shipmentStatus;
-      deliveryStatusEnum = deliveryStatusMap[deliveryStatus].deliveryStatusEnum;
-    }
-
-    const [newShipment] = await db
-      .insert(shipments)
-      .values({
-        awbNumber,
-        flightId: availableFlight?.id,
-        originAirportId: originAirport.id,
-        destAirportId: destAirport.id,
-        priority,
-        productType,
-        quantity: 1,
-        weightKg: String(productWeightValue),
+      await tx.insert(shipmentEvents).values({
+        shipmentId: insertedShipment.id,
         status: shipmentStatus,
-        deliveryStatus: deliveryStatusEnum,
-        notes: buildShipmentNotes({
-          sender,
-          receiver,
-          telpNumber,
-          originAddress,
-          destinationAddress,
-          deliveryType,
-          shippingFee: formatShippingFee(shippingFee),
-          weightUnit,
-          shippingDate,
-          notes,
-        }),
-        createdBy: user.id,
-        estimatedDelivery: shippingDate ? new Date(new Date(shippingDate).getTime() + 3 * 24 * 60 * 60 * 1000) : undefined,
-      })
-      .returning();
+        location: originAddress,
+        notes: `Shipment created - ${deliveryStatus || 'Booked'}`,
+        changedBy: user.id,
+      });
 
-    await db.insert(shipmentEvents).values({
-      shipmentId: newShipment.id,
-      status: shipmentStatus,
-      location: originAddress,
-      notes: `Shipment created - ${deliveryStatus || 'Booked'}`,
-      changedBy: user.id,
+      return insertedShipment;
     });
 
     // Log shipment creation activity
@@ -389,8 +398,10 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true, data: newShipment }, { status: 201 });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[POST /api/shipments]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    const status = err.message?.includes('tracking number') ? 409 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -1,10 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { airplanes, airlines } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
+import { getSessionUser } from '@/lib/auth/session';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    const token = request.cookies.get('terminal_session')?.value;
+    const user = token ? await getSessionUser(token) : null;
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
     const { searchParams } = new URL(request.url);
     const airlineId = searchParams.get('airlineId');
 
