@@ -1862,6 +1862,11 @@
   color: #0369a1;
 }
 
+.sl-badge-closed {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
 .sl-badge-manifested {
   background: #f3e8ff;
   color: #7e22ce;

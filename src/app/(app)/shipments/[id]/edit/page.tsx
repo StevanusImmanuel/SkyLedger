@@ -33,7 +33,10 @@ type Airplane = {
   flightNumber: string;
   model: string;
   capacity: number;
+  maxWeightKg: string | null;
+  maxVolumeM3: string | null;
   airlineCode: string;
+  utilizedWeight?: number;
 };
 
 type Airport = {
@@ -92,6 +95,7 @@ const DELIVERY_STATUSES = [
   "Out for Delivery",
   "Ready for Pickup",
   "Delivered",
+  "Closed",
 ];
 
 export default function EditShipmentPage() {
@@ -110,7 +114,12 @@ export default function EditShipmentPage() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [originalUpdatedAt, setOriginalUpdatedAt] = useState<string>("");
+  const [isClosed, setIsClosed] = useState(false);
   
+  const [originalAirplaneId, setOriginalAirplaneId] = useState<number | null>(null);
+  const [originalWeightKg, setOriginalWeightKg] = useState<number>(0);
+  const [originalStatus, setOriginalStatus] = useState<string>("");
+  const [capacityRecommendations, setCapacityRecommendations] = useState<any[]>([]);
 
   // Form fields (State internal form aplikasi)
   const [formData, setFormData] = useState({
@@ -135,6 +144,48 @@ export default function EditShipmentPage() {
   );
   const shippingFeeDisplay = shippingFeeAmount === null ? "" : formatShippingFee(shippingFeeAmount);
 
+  const currentPlane = useMemo(() => {
+    if (!selectedAirplane) return null;
+    return airplanes.find(a => a.airplaneId === selectedAirplane);
+  }, [selectedAirplane, airplanes]);
+
+  const isActiveStatus = useMemo(() => {
+    return ['pending', 'processing', 'in_transit'].includes(originalStatus);
+  }, [originalStatus]);
+
+  const baseUtilized = useMemo(() => {
+    if (!currentPlane) return 0;
+    const dbUtilized = Number(currentPlane.utilizedWeight || 0);
+    if (isActiveStatus && selectedAirplane === originalAirplaneId) {
+      return Math.max(0, dbUtilized - originalWeightKg);
+    }
+    return dbUtilized;
+  }, [currentPlane, selectedAirplane, originalAirplaneId, originalWeightKg, isActiveStatus]);
+
+  const capacityMetrics = useMemo(() => {
+    if (!currentPlane) return null;
+    const maxWeight = Number(currentPlane.maxWeightKg || 0);
+    const utilized = baseUtilized;
+    const weightVal = Number(formData.productWeight || 0);
+    
+    const remaining = maxWeight - utilized;
+    const isExceeded = weightVal > remaining;
+    const totalProjected = utilized + weightVal;
+    const utilizationPct = maxWeight > 0 ? (utilized / maxWeight) * 100 : 0;
+    const projectedPct = maxWeight > 0 ? (totalProjected / maxWeight) * 100 : 0;
+
+    return {
+      maxWeight,
+      utilized,
+      remaining,
+      nextWeight: weightVal,
+      isExceeded,
+      totalProjected,
+      utilizationPct,
+      projectedPct,
+    };
+  }, [currentPlane, baseUtilized, formData.productWeight]);
+
   // Fetch shipment data
   useEffect(() => {
     async function fetchShipment() {
@@ -143,6 +194,9 @@ export default function EditShipmentPage() {
         const data = await res.json();
         if (data.success) {
           const shipment: Shipment = data.data;
+          if (shipment.status === 'closed') {
+            setIsClosed(true);
+          }
 
           const deliveryStatusMap: Record<string, string> = {
             'booked': 'Booked',
@@ -158,8 +212,8 @@ export default function EditShipmentPage() {
           };
 
           const displayDeliveryStatus = shipment.deliveryStatus
-            ? deliveryStatusMap[shipment.deliveryStatus] || 'Booked'
-            : 'Booked';
+             ? deliveryStatusMap[shipment.deliveryStatus] || 'Booked'
+             : 'Booked';
 
           // Extract data from notes field
           const getNoteValue = (label: string) => {
@@ -199,7 +253,10 @@ export default function EditShipmentPage() {
           }
           if (shipment.flight?.airplane?.airplaneId) {
             setSelectedAirplane(shipment.flight.airplane.airplaneId);
+            setOriginalAirplaneId(shipment.flight.airplane.airplaneId);
           }
+          setOriginalWeightKg(Number(shipment.weightKg || 0));
+          setOriginalStatus(shipment.status || "");
           setOriginalUpdatedAt(shipment.updatedAt || "");
         }
       } catch (error) {
@@ -436,6 +493,28 @@ export default function EditShipmentPage() {
     );
   }
 
+  if (isClosed) {
+    return (
+      <div className="p-10 max-w-6xl mx-auto w-full animate-in fade-in duration-300">
+        <PageTitle title="Shipment Finalized" />
+        <div className="rounded-xl border border-slate-300 bg-white p-8">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#1a2d5a', marginBottom: 16 }}>
+            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>Shipment Finalized</h2>
+          </div>
+          <p className="mb-6 text-sm font-medium text-[#64748b]">
+            This shipment is closed and finalized. Its data is read-only and cannot be modified.
+          </p>
+          <button
+            onClick={() => router.push('/shipments')}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#00236f] px-5 py-2.5 text-sm font-bold text-white"
+          >
+            Back to shipments
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-10 max-w-6xl mx-auto w-full animate-in fade-in duration-500">
       <PageTitle title="Edit Shipment" />
@@ -502,13 +581,103 @@ export default function EditShipmentPage() {
                   <option value="">Select Airplane</option>
                   {airplanes.map((airplane) => (
                     <option key={airplane.airplaneId} value={airplane.airplaneId}>
-                      {airplane.flightNumber} - {airplane.model}
+                      {airplane.flightNumber} - {airplane.model}{airplane.maxWeightKg ? ` (max ${airplane.maxWeightKg}kg)` : ''}
                     </option>
                   ))}
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
               <FormError message={errors.airplane || ""} />
+              {currentPlane && capacityMetrics && (
+                <div style={{ marginTop: 10, padding: '12px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12.5 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, color: '#1a2d5a', marginBottom: 6 }}>
+                    <span>Capacity Load</span>
+                    <span>{capacityMetrics.utilized.toLocaleString()} / {capacityMetrics.maxWeight.toLocaleString()} kg</span>
+                  </div>
+                  <div style={{ width: '100%', height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+                    <div
+                      style={{
+                        width: `${Math.min(capacityMetrics.utilizationPct, 100)}%`,
+                        height: '100%',
+                        background: '#0ea5e9',
+                        borderRadius: 3,
+                      }}
+                    />
+                  </div>
+                  
+                  {capacityMetrics.nextWeight > 0 && (
+                    <div style={{ marginTop: 8, borderTop: '1px dashed #cbd5e1', paddingTop: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: capacityMetrics.isExceeded ? '#ef4444' : '#475569', marginBottom: 4 }}>
+                        <span>Projected Load</span>
+                        <span>{capacityMetrics.totalProjected.toLocaleString()} kg ({capacityMetrics.projectedPct.toFixed(0)}%)</span>
+                      </div>
+                      <div style={{ width: '100%', height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            width: `${Math.min(capacityMetrics.projectedPct, 100)}%`,
+                            height: '100%',
+                            background: capacityMetrics.isExceeded ? '#ef4444' : '#10b981',
+                            borderRadius: 3,
+                          }}
+                        />
+                      </div>
+                      {capacityMetrics.isExceeded && (
+                        <div style={{ color: '#ef4444', fontWeight: 800, fontSize: 11, marginTop: 6 }}>
+                          ⚠️ Exceeds capacity by {(capacityMetrics.totalProjected - capacityMetrics.maxWeight).toLocaleString()} kg!
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {capacityRecommendations.length > 0 && (
+                <div style={{ marginTop: 12, padding: '14px', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: 8, fontSize: 12 }}>
+                  <div style={{ fontWeight: 800, color: '#b45309', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    ⚠️ Capacity Exceeded. Recommended Alternatives:
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {capacityRecommendations.map(r => (
+                      <button
+                        key={r.airplaneId}
+                        type="button"
+                        onClick={() => { setSelectedAirplane(r.airplaneId); setCapacityRecommendations([]); }}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '10px 12px',
+                          background: '#fff',
+                          border: '1px solid #fcd34d',
+                          borderRadius: 8,
+                          cursor: 'pointer',
+                          color: '#1a2d5a',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, marginBottom: 4 }}>
+                          <span>{r.flightNumber} — {r.model}</span>
+                          <span style={{ color: '#0ea5e9' }}>{(r.remainingCapacity || 0).toLocaleString()} kg free</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 4 }}>
+                          <span>Max: {Number(r.maxWeightKg).toLocaleString()} kg</span>
+                          <span>{Number(r.utilizationPercentage || 0).toFixed(0)}% Utilized</span>
+                        </div>
+                        <div style={{ width: '100%', height: 4, background: '#f1f5f9', borderRadius: 2, overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${Math.min(Number(r.utilizationPercentage || 0), 100)}%`,
+                              height: '100%',
+                              background: '#0ea5e9',
+                              borderRadius: 2,
+                            }}
+                          />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

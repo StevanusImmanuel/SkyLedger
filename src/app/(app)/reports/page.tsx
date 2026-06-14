@@ -15,7 +15,7 @@ type Shipment = {
   destAirport: { iataCode: string; name: string; city: string; country: string } | null;
   flight: { airplane: { airplaneId: number; flightNumber: string } | null } | null;
   priority: 'standard' | 'express' | 'critical';
-  status: 'pending' | 'processing' | 'in_transit' | 'delivered' | 'delayed' | 'cancelled';
+  status: 'pending' | 'processing' | 'in_transit' | 'delivered' | 'delayed' | 'cancelled' | 'closed';
   deliveryStatus: 'booked' | 'received_at_warehouse' | 'security_cleared' | 'manifested' | 'departed' | 'transshipment' | 'arrived_at_destination' | 'out_for_delivery' | 'ready_for_pickup' | 'delivered' | null;
   weightKg: string;
   productType: string | null;
@@ -30,6 +30,7 @@ const statusIndicatorMap: Record<string, string> = {
   processing: '#8b5cf6',
   delivered: '#10b981',
   cancelled: '#ef4444',
+  closed: '#94a3b8',
   // Delivery status colors
   booked: '#8b5cf6',
   received_at_warehouse: '#8b5cf6',
@@ -49,6 +50,7 @@ const statusClassMap: Record<string, string> = {
   processing: 'sl-badge-manifested',
   delivered: 'sl-badge-ontime',
   cancelled: 'sl-badge-delayed',
+  closed: 'sl-badge-closed',
   // Delivery status classes
   booked: 'sl-badge-manifested',
   received_at_warehouse: 'sl-badge-manifested',
@@ -68,11 +70,12 @@ const airportColorMap: Record<string, string> = {
 };
 
 // Shipments statuses that count as delivered for the reports page:
-const DELIVERED_STATUSES = ['delivered', 'arrived_at_destination', 'out_for_delivery', 'ready_for_pickup'];
+const DELIVERED_STATUSES = ['delivered', 'arrived_at_destination', 'out_for_delivery', 'ready_for_pickup', 'closed'];
 
 function ReportsContent() {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isTableLoading, setIsTableLoading] = useState(false);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [airports, setAirports] = useState<Array<{ id: number; iataCode: string; name: string }>>([]);
   const [selectedAirport, setSelectedAirport] = useState<string>('all');
@@ -86,7 +89,7 @@ function ReportsContent() {
     totalWeight: 0,
   });
   const debouncedSearch = useDebounce(search, 500);
-  const { currentPage, setPage, getPaginatedData, getTotalPages, itemsPerPage } = usePagination(7);
+  const { currentPage, setPage, getPaginatedData, getTotalPages, itemsPerPage } = usePagination(10);
 
   // Fetch airports
   useEffect(() => {
@@ -112,7 +115,11 @@ function ReportsContent() {
         const params = new URLSearchParams();
         if (debouncedSearch) params.set('search', debouncedSearch);
         if (selectedAirport !== 'all') params.set('airport', selectedAirport);
-        params.set('deliveryStatus', selectedStatus);
+        if (selectedStatus === 'closed') {
+          params.set('status', 'closed');
+        } else {
+          params.set('deliveryStatus', selectedStatus);
+        }
         if (dateFrom) params.set('dateFrom', dateFrom);
         if (dateTo) params.set('dateTo', dateTo);
         params.set('limit', '1000'); // Get all for reports
@@ -126,7 +133,7 @@ function ReportsContent() {
           const total = json.data.length;
           const inFlight = 0;
           const arrived = json.data.filter((s: Shipment) => 
-            DELIVERED_STATUSES.includes(s.deliveryStatus || '')
+            DELIVERED_STATUSES.includes(s.deliveryStatus || '') || s.status === 'closed'
           ).length;
 
           const totalWeight = json.data.reduce((sum: number, s: Shipment) => sum + Number(s.weightKg), 0);
@@ -146,6 +153,12 @@ function ReportsContent() {
   const paginatedShipments = getPaginatedData(shipments);
   const totalPages = getTotalPages(shipments.length);
   const startIndex = (currentPage - 1) * itemsPerPage;
+
+  const handlePageChange = (page: number) => {
+    setIsTableLoading(true);
+    setPage(page);
+    setTimeout(() => setIsTableLoading(false), 250);
+  };
 
   return (
     <div>
@@ -278,6 +291,7 @@ function ReportsContent() {
             <option value="arrived_at_destination">Arrived at Destination</option>
             <option value="out_for_delivery">Out for Delivery</option>
             <option value="ready_for_pickup">Ready for Pickup</option>
+            <option value="closed">Closed</option>
           </select>
         </div>
         <div className="sl-report-export-btns">
@@ -324,7 +338,9 @@ function ReportsContent() {
 
       {/* AWB Table */}
       {isLoading ? (
-        <TableSkeleton rows={7} />
+        <TableSkeleton rows={10} />
+      ) : isTableLoading ? (
+        <TableSkeleton rows={10} />
       ) : (
         <div className="sl-awb-table-container">
           <table className="sl-table">
@@ -347,14 +363,14 @@ function ReportsContent() {
                   </td>
                 </tr>
               ) : paginatedShipments.map((s) => {
-                const statusKey = s.deliveryStatus || s.status;
+                const statusKey = s.status === 'closed' ? 'closed' : (s.deliveryStatus || s.status);
                 const statusClass = statusClassMap[statusKey] || 'sl-badge-manifested';
                 const indicatorColor = statusIndicatorMap[statusKey] || '#8b5cf6';
                 const originColor = airportColorMap[s.originAirport?.iataCode || ''] || 'blue';
                 const destColor = airportColorMap[s.destAirport?.iataCode || ''] || 'blue';
 
-                // Format delivery status for display
-                const displayStatus = s.deliveryStatus
+                const displayStatus = s.status === 'closed' ? 'Closed'
+                  : s.deliveryStatus
                   ? s.deliveryStatus.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
                   : s.status.replace('_', '-').toUpperCase();
 
@@ -393,7 +409,7 @@ function ReportsContent() {
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
-              onPageChange={setPage}
+              onPageChange={handlePageChange}
               totalItems={shipments.length}
               itemsPerPage={itemsPerPage}
               startIndex={startIndex}

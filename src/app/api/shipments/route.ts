@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { shipments, shipmentEvents, airports, flights, airlines } from '@/lib/db/schema';
+import { shipments, shipmentEvents, airports, flights, airlines, airplanes } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
 import {
   calculateShippingFeeFromInput,
   formatShippingFee,
   isShipmentPriority,
 } from '@/lib/shipments/shipping-fee';
-import { eq, desc, and, or, ilike, count, gte, lte, SQL, inArray } from 'drizzle-orm';
+import { eq, desc, and, or, ilike, count, gte, lte, SQL, inArray, sql, ne } from 'drizzle-orm';
 import { logActivity } from '@/lib/activity-logger';
 
 async function getAuthUser(req: NextRequest) {
@@ -169,9 +169,9 @@ export async function GET(request: NextRequest) {
     ]);
 
     return NextResponse.json({ success: true, data: rows, total });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[GET /api/shipments]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal server error', stack: error.stack }, { status: 500 });
   }
 }
 
@@ -289,6 +289,86 @@ export async function POST(request: NextRequest) {
         })
         .returning();
       availableFlight = newFlight;
+    }
+
+    // Capacity validation
+    const airplane = await db.query.airplanes.findFirst({
+      where: eq(airplanes.airplaneId, airplaneId),
+    });
+
+    if (airplane?.maxWeightKg) {
+      const maxWeight = Number(airplane.maxWeightKg);
+      const [{ value: currentLoad }] = await db
+        .select({ value: sql<string>`COALESCE(SUM(CAST(${shipments.weightKg} AS NUMERIC)), 0)` })
+        .from(shipments)
+        .where(
+          and(
+            eq(shipments.flightId, availableFlight!.id),
+            inArray(shipments.status, ['pending', 'processing', 'in_transit'])
+          )
+        );
+
+      const existingWeight = Number(currentLoad);
+      if ((existingWeight + productWeightValue) > maxWeight) {
+        // Find alternative airplanes from the same airline with sufficient capacity
+        const activeWeightSubquery = db
+          .select({
+            airplaneId: flights.airplaneId,
+            totalWeight: sql<number>`SUM(CAST(${shipments.weightKg} AS NUMERIC))`.as('total_weight'),
+          })
+          .from(shipments)
+          .innerJoin(flights, eq(shipments.flightId, flights.id))
+          .where(
+            and(
+              inArray(flights.status, ['scheduled', 'departed']),
+              inArray(shipments.status, ['pending', 'processing', 'in_transit'])
+            )
+          )
+          .groupBy(flights.airplaneId)
+          .as('aw');
+
+        const allAlternativePlanes = await db
+          .select({
+            airplaneId: airplanes.airplaneId,
+            flightNumber: airplanes.flightNumber,
+            model: airplanes.model,
+            maxWeightKg: airplanes.maxWeightKg,
+            utilizedWeight: sql<number>`COALESCE(${activeWeightSubquery.totalWeight}, 0)`,
+          })
+          .from(airplanes)
+          .leftJoin(activeWeightSubquery, eq(airplanes.airplaneId, activeWeightSubquery.airplaneId))
+          .where(
+            and(
+              eq(airplanes.airlineId, airlineId),
+              ne(airplanes.airplaneId, airplaneId)
+            )
+          );
+
+        // Map and filter alternatives that can safely accommodate the shipment
+        const recommendations = allAlternativePlanes
+          .map(plane => {
+            const limitWeight = Number(plane.maxWeightKg || 0);
+            const utilized = Number(plane.utilizedWeight);
+            const remaining = limitWeight - utilized;
+            const utilizationPct = limitWeight > 0 ? (utilized / limitWeight) * 100 : 0;
+            return {
+              airplaneId: plane.airplaneId,
+              flightNumber: plane.flightNumber,
+              model: plane.model,
+              maxWeightKg: plane.maxWeightKg,
+              utilizedWeight: utilized,
+              remainingCapacity: remaining,
+              utilizationPercentage: utilizationPct,
+            };
+          })
+          .filter(plane => plane.remainingCapacity >= productWeightValue)
+          .sort((a, b) => Number(a.maxWeightKg) - Number(b.maxWeightKg)); // Best fit: smallest airplane capacity first
+
+        return NextResponse.json({
+          error: `Airplane ${airplane.flightNumber} capacity exceeded. Max: ${maxWeight}kg, current load: ${existingWeight.toFixed(1)}kg, shipment: ${productWeightValue}kg`,
+          recommendations,
+        }, { status: 400 });
+      }
     }
 
     // Generate and verify AWB uniqueness (avoid duplicate tracking numbers)

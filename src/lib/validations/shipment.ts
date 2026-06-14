@@ -17,7 +17,7 @@ export const updateShipmentSchema = createShipmentSchema
   .partial()
   .extend({
     status: z
-      .enum(['pending', 'processing', 'in_transit', 'delivered', 'delayed', 'cancelled'])
+      .enum(['pending', 'processing', 'in_transit', 'delivered', 'delayed', 'cancelled', 'closed'])
       .optional(),
     statusNote: z.string().max(500).optional(),
   });

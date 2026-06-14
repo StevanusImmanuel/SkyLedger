@@ -34,7 +34,10 @@ type Airplane = {
   flightNumber: string;
   model: string;
   capacity: number;
+  maxWeightKg: string | null;
+  maxVolumeM3: string | null;
   airlineCode: string;
+  utilizedWeight?: number;
 };
 
 type Airport = {
@@ -78,6 +81,7 @@ const DELIVERY_STATUSES = [
   "Out for Delivery",
   "Ready for Pickup",
   "Delivered",
+  "Closed",
 ];
 
 export default function NewShipmentPage() {
@@ -92,6 +96,7 @@ export default function NewShipmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [capacityRecommendations, setCapacityRecommendations] = useState<any[]>([]);
 
   // Form fields
   const [formData, setFormData] = useState({
@@ -117,6 +122,36 @@ export default function NewShipmentPage() {
     [formData.productWeight, formData.priority, formData.weightUnit]
   );
   const shippingFeeDisplay = shippingFeeAmount === null ? "" : formatShippingFee(shippingFeeAmount);
+
+  const currentPlane = useMemo(() => {
+    if (!selectedAirplane) return null;
+    return airplanes.find(a => a.airplaneId === selectedAirplane);
+  }, [selectedAirplane, airplanes]);
+
+  const capacityMetrics = useMemo(() => {
+    if (!currentPlane) return null;
+    const maxWeight = Number(currentPlane.maxWeightKg || 0);
+    const utilized = Number(currentPlane.utilizedWeight || 0);
+    const weightVal = Number(formData.productWeight || 0);
+    const nextWeight = weightVal * (formData.weightUnit === 'Tonnes' ? 1000 : 1);
+    
+    const remaining = maxWeight - utilized;
+    const isExceeded = nextWeight > remaining;
+    const totalProjected = utilized + nextWeight;
+    const utilizationPct = maxWeight > 0 ? (utilized / maxWeight) * 100 : 0;
+    const projectedPct = maxWeight > 0 ? (totalProjected / maxWeight) * 100 : 0;
+
+    return {
+      maxWeight,
+      utilized,
+      remaining,
+      nextWeight,
+      isExceeded,
+      totalProjected,
+      utilizationPct,
+      projectedPct,
+    };
+  }, [currentPlane, formData.productWeight, formData.weightUnit]);
 
   // Fetch airlines on mount
   useEffect(() => {
@@ -299,6 +334,9 @@ export default function NewShipmentPage() {
         });
         router.push('/shipments');
       } else {
+        if (data.recommendations?.length) {
+          setCapacityRecommendations(data.recommendations);
+        }
         addNotification({
           variant: 'destructive',
           title: 'Failed to create shipment',
@@ -426,13 +464,103 @@ export default function NewShipmentPage() {
                   <option value="">Select Airplane</option>
                   {airplanes.map((airplane) => (
                     <option key={airplane.airplaneId} value={airplane.airplaneId}>
-                      {airplane.flightNumber} - {airplane.model}
+                      {airplane.flightNumber} - {airplane.model}{airplane.maxWeightKg ? ` (max ${airplane.maxWeightKg}kg)` : ''}
                     </option>
                   ))}
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none text-xs" />
               </div>
               <FormError message={errors.airplane || ""} />
+              {currentPlane && capacityMetrics && (
+                <div style={{ marginTop: 10, padding: '12px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12.5 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, color: '#1a2d5a', marginBottom: 6 }}>
+                    <span>Capacity Load</span>
+                    <span>{capacityMetrics.utilized.toLocaleString()} / {capacityMetrics.maxWeight.toLocaleString()} kg</span>
+                  </div>
+                  <div style={{ width: '100%', height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+                    <div
+                      style={{
+                        width: `${Math.min(capacityMetrics.utilizationPct, 100)}%`,
+                        height: '100%',
+                        background: '#0ea5e9',
+                        borderRadius: 3,
+                      }}
+                    />
+                  </div>
+                  
+                  {capacityMetrics.nextWeight > 0 && (
+                    <div style={{ marginTop: 8, borderTop: '1px dashed #cbd5e1', paddingTop: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: capacityMetrics.isExceeded ? '#ef4444' : '#475569', marginBottom: 4 }}>
+                        <span>Projected Load</span>
+                        <span>{capacityMetrics.totalProjected.toLocaleString()} kg ({capacityMetrics.projectedPct.toFixed(0)}%)</span>
+                      </div>
+                      <div style={{ width: '100%', height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            width: `${Math.min(capacityMetrics.projectedPct, 100)}%`,
+                            height: '100%',
+                            background: capacityMetrics.isExceeded ? '#ef4444' : '#10b981',
+                            borderRadius: 3,
+                          }}
+                        />
+                      </div>
+                      {capacityMetrics.isExceeded && (
+                        <div style={{ color: '#ef4444', fontWeight: 800, fontSize: 11, marginTop: 6 }}>
+                          ⚠️ Exceeds capacity by {(capacityMetrics.totalProjected - capacityMetrics.maxWeight).toLocaleString()} kg!
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {capacityRecommendations.length > 0 && (
+                <div style={{ marginTop: 12, padding: '14px', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: 8, fontSize: 12 }}>
+                  <div style={{ fontWeight: 800, color: '#b45309', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    ⚠️ Capacity Exceeded. Recommended Alternatives:
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {capacityRecommendations.map(r => (
+                      <button
+                        key={r.airplaneId}
+                        type="button"
+                        onClick={() => { setSelectedAirplane(r.airplaneId); setCapacityRecommendations([]); }}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '10px 12px',
+                          background: '#fff',
+                          border: '1px solid #fcd34d',
+                          borderRadius: 8,
+                          cursor: 'pointer',
+                          color: '#1a2d5a',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, marginBottom: 4 }}>
+                          <span>{r.flightNumber} — {r.model}</span>
+                          <span style={{ color: '#0ea5e9' }}>{(r.remainingCapacity || 0).toLocaleString()} kg free</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 4 }}>
+                          <span>Max: {Number(r.maxWeightKg).toLocaleString()} kg</span>
+                          <span>{Number(r.utilizationPercentage || 0).toFixed(0)}% Utilized</span>
+                        </div>
+                        <div style={{ width: '100%', height: 4, background: '#f1f5f9', borderRadius: 2, overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${Math.min(Number(r.utilizationPercentage || 0), 100)}%`,
+                              height: '100%',
+                              background: '#0ea5e9',
+                              borderRadius: 2,
+                            }}
+                          />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

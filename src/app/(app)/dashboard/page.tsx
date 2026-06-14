@@ -225,20 +225,10 @@ function DashboardContent() {
       }
     }
 
-    // Initial fetch
+    // Initial fetch only — user refreshes manually
     fetchDashboard(true);
 
-    // Poll every 30 seconds to keep data fresh
-    const interval = setInterval(() => {
-      if (shouldStopPollingRef.current) {
-        clearInterval(interval);
-        return;
-      }
-
-      fetchDashboard();
-    }, 30000);
-
-    return () => clearInterval(interval);
+    return () => {};
   }, []);
 
   if (!data && !isLoading) {

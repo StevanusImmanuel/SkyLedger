@@ -3,7 +3,7 @@ import { activityLogs } from '@/lib/db/schema';
 import type { NextRequest } from 'next/server';
 
 type ActivityAction = 'login' | 'logout' | 'create' | 'update' | 'delete' | 'search' | 'export' | 'view';
-type EntityType = 'shipment' | 'user' | 'report' | 'auth' | 'system';
+type EntityType = 'shipment' | 'user' | 'report' | 'auth' | 'system' | 'airplane';
 
 interface LogActivityParams {
   userId: string;

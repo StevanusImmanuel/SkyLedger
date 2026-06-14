@@ -1,14 +1,11 @@
 "use client";
 
-import { Component, useMemo, type ErrorInfo, type ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import {
-  adaptDashboardShipmentsToMap,
-  type DashboardShipmentMapDatum,
-} from "@/lib/map/skyLedgerMapAdapter";
+import type { DashboardShipmentMapDatum } from "@/lib/map/skyLedgerMapAdapter";
 
-const SkyLedgerMapLibre = dynamic(
-  () => import("@/components/maps/SkyLedgerMapLibre"),
+const WorldMapGL = dynamic(
+  () => import("@/components/maps/WorldMapGL"),
   {
     ssr: false,
     loading: () => <DashboardMapFallback message="Loading satellite map..." />,
@@ -81,35 +78,23 @@ type MapLibreDashboardWrapperProps = {
 };
 
 export function MapLibreDashboardWrapper({
-  maxItems = 5,
   shipments = [],
 }: MapLibreDashboardWrapperProps) {
-  const adaptedMapData = useMemo(
-    () => adaptDashboardShipmentsToMap(shipments, { maxItems }),
-    [maxItems, shipments]
-  );
-  const hasRealMapData = adaptedMapData.aircraft.length > 0 && adaptedMapData.routes.length > 0;
-
   return (
     <div className="sl-chart-card" style={{ height: 520 }}>
       <div className="sl-chart-header">
         <div>
           <p className="sl-chart-title">Active Shipments Map</p>
-          <p className="sl-chart-subtitle">Satellite flight operations preview</p>
+          <p className="sl-chart-subtitle">3D Globe  live flight operations</p>
         </div>
         <div style={{ fontSize: 11, color: "#64748b" }}>
-          {hasRealMapData ? `${adaptedMapData.aircraft.length} shipments` : "Mock fallback"}
+          {shipments.length > 0 ? `${shipments.length} shipments` : "Mock fallback"}
         </div>
       </div>
 
       <div style={{ height: 430, minHeight: 430, width: "100%" }}>
         <DashboardMapErrorBoundary>
-          <SkyLedgerMapLibre
-            aircraft={hasRealMapData ? adaptedMapData.aircraft : undefined}
-            height="100%"
-            maxItems={maxItems}
-            routes={hasRealMapData ? adaptedMapData.routes : undefined}
-          />
+          <WorldMapGL shipments={shipments.length > 0 ? shipments : undefined} />
         </DashboardMapErrorBoundary>
       </div>
     </div>

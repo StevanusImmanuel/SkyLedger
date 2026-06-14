@@ -200,3 +200,65 @@ export function PieChartSkeleton() {
     </div>
   );
 }
+
+export function ShipmentDetailSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-6xl p-6 md:p-10">
+      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="skeleton" style={{ width: 120, height: 11, borderRadius: 4, marginBottom: 12 }} />
+          <div className="skeleton" style={{ width: 80, height: 11, borderRadius: 4, marginBottom: 8 }} />
+          <div className="skeleton" style={{ width: 240, height: 32, borderRadius: 6, marginBottom: 8 }} />
+          <div className="skeleton" style={{ width: 280, height: 12, borderRadius: 4 }} />
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div className="skeleton" style={{ width: 90, height: 36, borderRadius: 8 }} />
+          <div className="skeleton" style={{ width: 90, height: 36, borderRadius: 8 }} />
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 20 }}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} style={{ background: '#fff', borderRadius: 12, border: '1px solid #e8edf4', padding: 20 }}>
+            <div className="skeleton" style={{ width: 100, height: 11, borderRadius: 4, marginBottom: 14 }} />
+            {Array.from({ length: 4 }).map((_, j) => (
+              <div key={j} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div className="skeleton" style={{ width: 80, height: 11, borderRadius: 4 }} />
+                <div className="skeleton" style={{ width: 120, height: 11, borderRadius: 4 }} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e8edf4', padding: 20 }}>
+        <div className="skeleton" style={{ width: 140, height: 14, borderRadius: 4, marginBottom: 14 }} />
+        <div className="skeleton" style={{ width: '100%', height: 180, borderRadius: 8 }} />
+      </div>
+    </div>
+  );
+}
+
+export function ShipmentFormSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-4xl p-6 md:p-10">
+      <div className="mb-6">
+        <div className="skeleton" style={{ width: 120, height: 11, borderRadius: 4, marginBottom: 12 }} />
+        <div className="skeleton" style={{ width: 200, height: 28, borderRadius: 6, marginBottom: 6 }} />
+        <div className="skeleton" style={{ width: 260, height: 12, borderRadius: 4 }} />
+      </div>
+      <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e8edf4', padding: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="skeleton" style={{ width: 100, height: 11, borderRadius: 4 }} />
+              <div className="skeleton" style={{ width: '100%', height: 38, borderRadius: 8 }} />
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
+          <div className="skeleton" style={{ width: 90, height: 38, borderRadius: 8 }} />
+          <div className="skeleton" style={{ width: 120, height: 38, borderRadius: 8 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
