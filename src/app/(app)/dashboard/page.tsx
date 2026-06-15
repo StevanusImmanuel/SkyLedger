@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect, useRef } from 'react';
 import type { MutableRefObject } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { RouteTableSkeleton, ChartSkeleton } from '@/components/ui/skeletons';
+import { RouteTableSkeleton, ChartSkeleton, DashboardChartsSkeleton } from '@/components/ui/skeletons';
 import { PageTitle } from '@/components/ui/page-title';
 
 const ShipmentMap = dynamic(
@@ -20,6 +20,14 @@ const MapLibreDashboardWrapper = dynamic(
   {
     ssr: false,
     loading: () => <ChartSkeleton />,
+  }
+);
+
+const DashboardCharts = dynamic(
+  () => import('@/components/dashboard/DashboardCharts'),
+  {
+    ssr: false,
+    loading: () => <DashboardChartsSkeleton />,
   }
 );
 
@@ -272,6 +280,16 @@ function DashboardContent() {
         <MapLibreDashboardWrapper shipments={shipmentMapData} />
       ) : (
         <ShipmentMap shipments={shipmentMapData} />
+      )}
+
+      {/* Statistics Charts */}
+      {isLoading ? (
+        <DashboardChartsSkeleton />
+      ) : (
+        <DashboardCharts
+          weightByDate={data?.deliveredWeightByDate || []}
+          priorityCounts={data?.activeShipmentsByPriority || []}
+        />
       )}
 
       {/* Top Operational Routes Table */}

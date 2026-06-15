@@ -133,6 +133,42 @@ export function ChartSkeleton() {
   );
 }
 
+const weightTrendSkeletonHeights = [40, 55, 48, 70, 62, 80, 58, 74];
+const priorityBarSkeletonHeights = [85, 60, 35];
+
+export function DashboardChartsSkeleton() {
+  return (
+    <div className="sl-charts-grid">
+      <div className="sl-chart-card">
+        <div className="sl-chart-header">
+          <div>
+            <div className="skeleton" style={{ width: 200, height: 16, borderRadius: 4, marginBottom: 6 }} />
+            <div className="skeleton" style={{ width: 150, height: 10, borderRadius: 4 }} />
+          </div>
+        </div>
+        <div style={{ height: 240, display: 'flex', alignItems: 'flex-end', gap: 8, padding: '20px 6px 0' }}>
+          {weightTrendSkeletonHeights.map((height, i) => (
+            <div key={i} className="skeleton" style={{ flex: 1, height: `${height}%`, borderRadius: 4 }} />
+          ))}
+        </div>
+      </div>
+      <div className="sl-chart-card">
+        <div className="sl-chart-header">
+          <div>
+            <div className="skeleton" style={{ width: 180, height: 16, borderRadius: 4, marginBottom: 6 }} />
+            <div className="skeleton" style={{ width: 130, height: 10, borderRadius: 4 }} />
+          </div>
+        </div>
+        <div style={{ height: 240, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 28, padding: '20px 20px 0' }}>
+          {priorityBarSkeletonHeights.map((height, i) => (
+            <div key={i} className="skeleton" style={{ width: 56, height: `${height}%`, borderRadius: 4 }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function RouteTableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="sl-routes-section">
