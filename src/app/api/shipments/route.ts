@@ -240,7 +240,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Product weight must be a positive number' }, { status: 400 });
     }
 
-    const shippingFee = calculateShippingFeeFromInput(productWeight, priority);
+    // Normalize to kg for storage and capacity checks
+    const weightInKg = weightUnit === 'Tonnes' ? productWeightValue * 1000 : productWeightValue;
+
+    const shippingFee = calculateShippingFeeFromInput(productWeight, priority, weightUnit);
 
     if (!isShipmentPriority(priority)) {
       return NextResponse.json({ error: 'Invalid priority level' }, { status: 400 });
@@ -343,7 +346,7 @@ export async function POST(request: NextRequest) {
         );
 
       const existingWeight = Number(currentLoad);
-      if ((existingWeight + productWeightValue) > maxWeight) {
+      if ((existingWeight + weightInKg) > maxWeight) {
         // Find alternative airplanes from the same airline with sufficient capacity
         const activeWeightSubquery = db
           .select({
@@ -396,11 +399,11 @@ export async function POST(request: NextRequest) {
               utilizationPercentage: utilizationPct,
             };
           })
-          .filter(plane => plane.remainingCapacity >= productWeightValue)
+          .filter(plane => plane.remainingCapacity >= weightInKg)
           .sort((a, b) => Number(a.maxWeightKg) - Number(b.maxWeightKg)); // Best fit: smallest airplane capacity first
 
         return NextResponse.json({
-          error: `Airplane ${airplane.flightNumber} capacity exceeded. Max: ${maxWeight}kg, current load: ${existingWeight.toFixed(1)}kg, shipment: ${productWeightValue}kg`,
+          error: `Airplane ${airplane.flightNumber} capacity exceeded. Max: ${maxWeight}kg, current load: ${existingWeight.toFixed(1)}kg, shipment: ${weightInKg}kg`,
           recommendations,
         }, { status: 400 });
       }
@@ -462,7 +465,7 @@ export async function POST(request: NextRequest) {
           )
         );
 
-      if ((Number(latestLoad) + productWeightValue) > maxWeight) {
+      if ((Number(latestLoad) + weightInKg) > maxWeight) {
         return NextResponse.json({
           error: `Aircraft capacity changed during processing. Available capacity is no longer sufficient for this shipment. Please retry.`,
         }, { status: 409 });
@@ -479,7 +482,7 @@ export async function POST(request: NextRequest) {
         priority,
         productType,
         quantity: 1,
-        weightKg: String(productWeightValue),
+        weightKg: String(weightInKg),
         status: shipmentStatus,
         deliveryStatus: deliveryStatusEnum,
         notes: buildShipmentNotes({
