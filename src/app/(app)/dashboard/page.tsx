@@ -56,12 +56,6 @@ type DashboardData = {
   }>;
 };
 
-type DashboardApiResponse = {
-  success?: boolean;
-  data?: DashboardData;
-  error?: string;
-};
-
 type DashboardApiResponse =
   | { success: true; data: DashboardData }
   | { success?: false; error?: string };
@@ -238,16 +232,7 @@ function DashboardContent() {
       } finally {
         if (showLoading) setIsLoading(false);
       }
-
-      setData(json.data);
-      hasDataRef.current = true;
-      setError('');
-    } catch {
-      setError(DASHBOARD_ERROR_MESSAGE);
-    } finally {
-      setIsLoading(false);
     }
-  }, []);
 
     // Initial fetch only — user refreshes manually
     fetchDashboard(true);
