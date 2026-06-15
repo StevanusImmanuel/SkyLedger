@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { shipments, shipmentEvents, airports, flights, airlines } from '@/lib/db/schema';
+import { shipments, shipmentEvents, airports, flights, airlines, airplanes } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
 import {
   calculateShippingFeeFromInput,
   formatShippingFee,
   isShipmentPriority,
 } from '@/lib/shipments/shipping-fee';
-import { eq, desc, and, or, ilike, count, gte, lte, SQL, inArray } from 'drizzle-orm';
+import { eq, desc, and, or, ilike, count, gte, lte, SQL, inArray, sql, ne } from 'drizzle-orm';
 import { logActivity } from '@/lib/activity-logger';
 
 type DeliveryStatus = NonNullable<typeof shipments.$inferSelect.deliveryStatus>;
@@ -190,9 +190,9 @@ export async function GET(request: NextRequest) {
     ]);
 
     return NextResponse.json({ success: true, data: rows, total });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[GET /api/shipments]', error);
-    return NextResponse.json({ error: 'Failed to load shipments. Please try again.' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal server error', stack: error.stack }, { status: 500 });
   }
 }
 
@@ -259,6 +259,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid airline selection' }, { status: 400 });
     }
 
+    // Validate aircraft exists and is active (before any flight is created)
+    const airplane = await db.query.airplanes.findFirst({
+      where: eq(airplanes.airplaneId, airplaneId),
+    });
+
+    if (!airplane) {
+      return NextResponse.json({ error: 'Selected aircraft does not exist' }, { status: 400 });
+    }
+
+    if (!airplane.isActive) {
+      return NextResponse.json({ error: `Aircraft ${airplane.flightNumber} is not active and cannot be assigned` }, { status: 400 });
+    }
+
     // Get airports
     const [originAirport, destAirport] = await Promise.all([
       db.query.airports.findFirst({ where: eq(airports.iataCode, originIata) }),
@@ -291,113 +304,207 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Destination airport (${destIata}) has invalid coordinates` }, { status: 400 });
     }
 
-    // Run writing operations in a database transaction
-    const newShipment = await db.transaction(async (tx) => {
-      // Find or create a flight for the airplane
-      let availableFlight = await tx.query.flights.findFirst({
-        where: and(
-          eq(flights.airplaneId, airplaneId),
-          eq(flights.status, 'scheduled')
-        ),
-      });
+    // Find or create a flight for the airplane
+    let availableFlight = await db.query.flights.findFirst({
+      where: and(
+        eq(flights.airplaneId, airplaneId),
+        eq(flights.status, 'scheduled')
+      ),
+    });
 
-      // If no scheduled flight exists, create one
-      if (!availableFlight) {
-        const [newFlight] = await tx
-          .insert(flights)
-          .values({
-            airlineId: airlineId,
-            airplaneId: airplaneId,
-            originAirportId: originAirport.id,
-            destAirportId: destAirport.id,
-            departureTime: shippingDate ? new Date(shippingDate) : new Date(),
-            arrivalTime: shippingDate ? new Date(new Date(shippingDate).getTime() + 3 * 24 * 60 * 60 * 1000) : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-            status: 'scheduled',
-          })
-          .returning();
-        availableFlight = newFlight;
-      }
-
-      // Generate and verify AWB uniqueness (avoid duplicate tracking numbers)
-      let awbNumber = '';
-      let isUnique = false;
-      for (let i = 0; i < 5; i++) {
-        awbNumber = generateAwbNumber(airline.airlineCode);
-        const existing = await tx.query.shipments.findFirst({
-          where: eq(shipments.awbNumber, awbNumber),
-        });
-        if (!existing) {
-          isUnique = true;
-          break;
-        }
-      }
-
-      if (!isUnique) {
-        throw new Error('Failed to generate a unique Air Waybill tracking number. Please try again.');
-      }
-
-      type ShipmentStatus = NonNullable<typeof shipments.$inferInsert.status>;
-      type DeliveryStatusEnum = NonNullable<typeof shipments.$inferInsert.deliveryStatus>;
-
-      const deliveryStatusMap: Record<string, { shipmentStatus: ShipmentStatus; deliveryStatusEnum: DeliveryStatusEnum }> = {
-        'Booked': { shipmentStatus: 'pending', deliveryStatusEnum: 'booked' },
-        'Received at Warehouse': { shipmentStatus: 'pending', deliveryStatusEnum: 'received_at_warehouse' },
-        'Security Cleared': { shipmentStatus: 'pending', deliveryStatusEnum: 'security_cleared' },
-        'Manifested': { shipmentStatus: 'pending', deliveryStatusEnum: 'manifested' },
-        'Departed': { shipmentStatus: 'in_transit', deliveryStatusEnum: 'departed' },
-        'Transshipment': { shipmentStatus: 'in_transit', deliveryStatusEnum: 'transshipment' },
-        'Arrived at Destination Airports': { shipmentStatus: 'processing', deliveryStatusEnum: 'arrived_at_destination' },
-        'Out for Delivery': { shipmentStatus: 'processing', deliveryStatusEnum: 'out_for_delivery' },
-        'Ready for Pickup': { shipmentStatus: 'processing', deliveryStatusEnum: 'ready_for_pickup' },
-        'Delivered': { shipmentStatus: 'delivered', deliveryStatusEnum: 'delivered' },
-      };
-
-      let shipmentStatus: ShipmentStatus = 'pending';
-      let deliveryStatusEnum: DeliveryStatusEnum = 'booked';
-      if (deliveryStatus && deliveryStatusMap[deliveryStatus]) {
-        shipmentStatus = deliveryStatusMap[deliveryStatus].shipmentStatus;
-        deliveryStatusEnum = deliveryStatusMap[deliveryStatus].deliveryStatusEnum;
-      }
-
-      const [insertedShipment] = await tx
-        .insert(shipments)
+    // If no scheduled flight exists, create one
+    if (!availableFlight) {
+      const [newFlight] = await db
+        .insert(flights)
         .values({
-          awbNumber,
-          flightId: availableFlight?.id,
+          airlineId: airlineId,
+          airplaneId: airplaneId,
           originAirportId: originAirport.id,
           destAirportId: destAirport.id,
-          priority,
-          productType,
-          quantity: 1,
-          weightKg: String(productWeightValue),
-          status: shipmentStatus,
-          deliveryStatus: deliveryStatusEnum,
-          notes: buildShipmentNotes({
-            sender,
-            receiver,
-            telpNumber,
-            originAddress,
-            destinationAddress,
-            deliveryType,
-            shippingFee: formatShippingFee(shippingFee),
-            weightUnit,
-            shippingDate,
-            notes,
-          }),
-          createdBy: user.id,
-          estimatedDelivery: shippingDate ? new Date(new Date(shippingDate).getTime() + 3 * 24 * 60 * 60 * 1000) : undefined,
+          departureTime: shippingDate ? new Date(shippingDate) : new Date(),
+          arrivalTime: shippingDate ? new Date(new Date(shippingDate).getTime() + 3 * 24 * 60 * 60 * 1000) : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+          status: 'scheduled',
         })
         .returning();
+      availableFlight = newFlight;
+    }
 
-      await tx.insert(shipmentEvents).values({
-        shipmentId: insertedShipment.id,
-        status: shipmentStatus,
-        location: originAddress,
-        notes: `Shipment created - ${deliveryStatus || 'Booked'}`,
-        changedBy: user.id,
+    // Capacity validation
+    if (airplane?.maxWeightKg) {
+      const maxWeight = Number(airplane.maxWeightKg);
+      const [{ value: currentLoad }] = await db
+        .select({ value: sql<string>`COALESCE(SUM(CAST(${shipments.weightKg} AS NUMERIC)), 0)` })
+        .from(shipments)
+        .where(
+          and(
+            eq(shipments.flightId, availableFlight!.id),
+            inArray(shipments.status, ['pending', 'processing', 'in_transit'])
+          )
+        );
+
+      const existingWeight = Number(currentLoad);
+      if ((existingWeight + productWeightValue) > maxWeight) {
+        // Find alternative airplanes from the same airline with sufficient capacity
+        const activeWeightSubquery = db
+          .select({
+            airplaneId: flights.airplaneId,
+            totalWeight: sql<number>`SUM(CAST(${shipments.weightKg} AS NUMERIC))`.as('total_weight'),
+          })
+          .from(shipments)
+          .innerJoin(flights, eq(shipments.flightId, flights.id))
+          .where(
+            and(
+              inArray(flights.status, ['scheduled', 'departed']),
+              inArray(shipments.status, ['pending', 'processing', 'in_transit'])
+            )
+          )
+          .groupBy(flights.airplaneId)
+          .as('aw');
+
+        const allAlternativePlanes = await db
+          .select({
+            airplaneId: airplanes.airplaneId,
+            flightNumber: airplanes.flightNumber,
+            model: airplanes.model,
+            maxWeightKg: airplanes.maxWeightKg,
+            utilizedWeight: sql<number>`COALESCE(${activeWeightSubquery.totalWeight}, 0)`,
+          })
+          .from(airplanes)
+          .leftJoin(activeWeightSubquery, eq(airplanes.airplaneId, activeWeightSubquery.airplaneId))
+          .where(
+            and(
+              eq(airplanes.airlineId, airlineId),
+              ne(airplanes.airplaneId, airplaneId),
+              eq(airplanes.isActive, true)
+            )
+          );
+
+        // Map and filter alternatives that can safely accommodate the shipment
+        const recommendations = allAlternativePlanes
+          .map(plane => {
+            const limitWeight = Number(plane.maxWeightKg || 0);
+            const utilized = Number(plane.utilizedWeight);
+            const remaining = limitWeight - utilized;
+            const utilizationPct = limitWeight > 0 ? (utilized / limitWeight) * 100 : 0;
+            return {
+              airplaneId: plane.airplaneId,
+              flightNumber: plane.flightNumber,
+              model: plane.model,
+              maxWeightKg: plane.maxWeightKg,
+              utilizedWeight: utilized,
+              remainingCapacity: remaining,
+              utilizationPercentage: utilizationPct,
+            };
+          })
+          .filter(plane => plane.remainingCapacity >= productWeightValue)
+          .sort((a, b) => Number(a.maxWeightKg) - Number(b.maxWeightKg)); // Best fit: smallest airplane capacity first
+
+        return NextResponse.json({
+          error: `Airplane ${airplane.flightNumber} capacity exceeded. Max: ${maxWeight}kg, current load: ${existingWeight.toFixed(1)}kg, shipment: ${productWeightValue}kg`,
+          recommendations,
+        }, { status: 400 });
+      }
+    }
+
+    // Generate and verify AWB uniqueness (avoid duplicate tracking numbers)
+    let awbNumber = '';
+    let isUnique = false;
+    for (let i = 0; i < 5; i++) {
+      awbNumber = generateAwbNumber(airline.airlineCode);
+      const existing = await db.query.shipments.findFirst({
+        where: eq(shipments.awbNumber, awbNumber),
       });
+      if (!existing) {
+        isUnique = true;
+        break;
+      }
+    }
 
-      return insertedShipment;
+    if (!isUnique) {
+      return NextResponse.json({ error: 'Failed to generate a unique Air Waybill tracking number. Please try again.' }, { status: 409 });
+    }
+
+    type ShipmentStatus = NonNullable<typeof shipments.$inferInsert.status>;
+    type DeliveryStatusEnum = NonNullable<typeof shipments.$inferInsert.deliveryStatus>;
+
+    const deliveryStatusMap: Record<string, { shipmentStatus: ShipmentStatus; deliveryStatusEnum: DeliveryStatusEnum }> = {
+      'Booked': { shipmentStatus: 'pending', deliveryStatusEnum: 'booked' },
+      'Received at Warehouse': { shipmentStatus: 'pending', deliveryStatusEnum: 'received_at_warehouse' },
+      'Security Cleared': { shipmentStatus: 'pending', deliveryStatusEnum: 'security_cleared' },
+      'Manifested': { shipmentStatus: 'pending', deliveryStatusEnum: 'manifested' },
+      'Departed': { shipmentStatus: 'in_transit', deliveryStatusEnum: 'departed' },
+      'Transshipment': { shipmentStatus: 'in_transit', deliveryStatusEnum: 'transshipment' },
+      'Arrived at Destination Airports': { shipmentStatus: 'processing', deliveryStatusEnum: 'arrived_at_destination' },
+      'Out for Delivery': { shipmentStatus: 'processing', deliveryStatusEnum: 'out_for_delivery' },
+      'Ready for Pickup': { shipmentStatus: 'processing', deliveryStatusEnum: 'ready_for_pickup' },
+      'Delivered': { shipmentStatus: 'delivered', deliveryStatusEnum: 'delivered' },
+    };
+
+    let shipmentStatus: ShipmentStatus = 'pending';
+    let deliveryStatusEnum: DeliveryStatusEnum = 'booked';
+    if (deliveryStatus && deliveryStatusMap[deliveryStatus]) {
+      shipmentStatus = deliveryStatusMap[deliveryStatus].shipmentStatus;
+      deliveryStatusEnum = deliveryStatusMap[deliveryStatus].deliveryStatusEnum;
+    }
+
+    // Final capacity re-check immediately before insert. The neon-http driver does not support
+    // interactive transactions, so this narrows (does not eliminate) the race window where a
+    // concurrent shipment could have consumed capacity since the validation above.
+    if (airplane?.maxWeightKg && availableFlight) {
+      const maxWeight = Number(airplane.maxWeightKg);
+      const [{ value: latestLoad }] = await db
+        .select({ value: sql<string>`COALESCE(SUM(CAST(${shipments.weightKg} AS NUMERIC)), 0)` })
+        .from(shipments)
+        .where(
+          and(
+            eq(shipments.flightId, availableFlight.id),
+            inArray(shipments.status, ['pending', 'processing', 'in_transit'])
+          )
+        );
+
+      if ((Number(latestLoad) + productWeightValue) > maxWeight) {
+        return NextResponse.json({
+          error: `Aircraft capacity changed during processing. Available capacity is no longer sufficient for this shipment. Please retry.`,
+        }, { status: 409 });
+      }
+    }
+
+    const [newShipment] = await db
+      .insert(shipments)
+      .values({
+        awbNumber,
+        flightId: availableFlight?.id,
+        originAirportId: originAirport.id,
+        destAirportId: destAirport.id,
+        priority,
+        productType,
+        quantity: 1,
+        weightKg: String(productWeightValue),
+        status: shipmentStatus,
+        deliveryStatus: deliveryStatusEnum,
+        notes: buildShipmentNotes({
+          sender,
+          receiver,
+          telpNumber,
+          originAddress,
+          destinationAddress,
+          deliveryType,
+          shippingFee: formatShippingFee(shippingFee),
+          weightUnit,
+          shippingDate,
+          notes,
+        }),
+        createdBy: user.id,
+        estimatedDelivery: shippingDate ? new Date(new Date(shippingDate).getTime() + 3 * 24 * 60 * 60 * 1000) : undefined,
+      })
+      .returning();
+
+    await db.insert(shipmentEvents).values({
+      shipmentId: newShipment.id,
+      status: shipmentStatus,
+      location: originAddress,
+      notes: `Shipment created - ${deliveryStatus || 'Booked'}`,
+      changedBy: user.id,
     });
 
     // Log shipment creation activity

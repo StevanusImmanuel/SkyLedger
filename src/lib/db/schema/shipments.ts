@@ -12,6 +12,7 @@ export const shipmentStatusEnum = pgEnum('shipment_status', [
   'delivered',
   'delayed',
   'cancelled',
+  'closed',
 ]);
 
 export const deliveryStatusEnum = pgEnum('delivery_status', [

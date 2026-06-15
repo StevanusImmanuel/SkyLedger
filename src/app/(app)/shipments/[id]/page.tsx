@@ -5,13 +5,16 @@ import type { ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Edit, Package, Plane, Route, UserRound } from "lucide-react";
+import { ArrowLeft, Edit, Package, Plane, Route, UserRound, Printer } from "lucide-react";
 import {
   calculateShippingFeeFromInput,
   formatShippingFee,
 } from "@/lib/shipments/shipping-fee";
 import { PageTitle } from "@/components/ui/page-title";
+import { ShipmentDetailSkeleton } from "@/components/ui/skeletons";
 import { apiFetch } from "@/lib/api-client";
+import { printShipmentReceipt } from "@/lib/utils/receipt";
+import { isReportingLocked } from "@/lib/shipments/status-flow";
 
 const ShipmentRouteMap = dynamic(
   () => import("@/components/shipments/ShipmentRouteMap"),
@@ -246,13 +249,7 @@ export default function ShipmentDetailPage() {
   }, [shipment]);
 
   if (isLoading) {
-    return (
-      <div className="mx-auto w-full max-w-6xl p-6 md:p-10">
-        <div className="rounded-xl border border-[#e8edf4] bg-white p-8 text-sm font-semibold text-[#64748b]">
-          Loading shipment details...
-        </div>
-      </div>
-    );
+    return <ShipmentDetailSkeleton />;
   }
 
   if (error || !shipment || !details) {
@@ -279,6 +276,24 @@ export default function ShipmentDetailPage() {
   return (
     <div className="mx-auto w-full max-w-6xl p-6 md:p-10">
       <PageTitle title={`Shipment ${shipment.awbNumber}`} />
+      {shipment.status === 'closed' && (
+        <div style={{ background: '#1a2d5a', color: '#fff', borderRadius: 10, padding: '10px 18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 700 }}>
+          <span style={{ background: '#fff', color: '#1a2d5a', borderRadius: 6, padding: '2px 10px', fontSize: 11, fontWeight: 800, letterSpacing: 1 }}>FINALIZED</span>
+          This shipment has been closed. All data is read-only and cannot be edited or deleted.
+        </div>
+      )}
+      {shipment.status === 'cancelled' && (
+        <div style={{ background: '#b91c1c', color: '#fff', borderRadius: 10, padding: '10px 18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 700 }}>
+          <span style={{ background: '#fff', color: '#b91c1c', borderRadius: 6, padding: '2px 10px', fontSize: 11, fontWeight: 800, letterSpacing: 1 }}>CANCELED</span>
+          This shipment has been canceled. All data is read-only and cannot be edited or deleted.
+        </div>
+      )}
+      {shipment.status !== 'closed' && shipment.status !== 'cancelled' && isReportingLocked(shipment.status, shipment.deliveryStatus) && (
+        <div style={{ background: '#047857', color: '#fff', borderRadius: 10, padding: '10px 18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 700 }}>
+          <span style={{ background: '#fff', color: '#047857', borderRadius: 6, padding: '2px 10px', fontSize: 11, fontWeight: 800, letterSpacing: 1 }}>FINALIZED</span>
+          This shipment has reached a delivered state and now appears in reports. It is read-only and cannot be edited or deleted.
+        </div>
+      )}
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <Link href="/shipments" className="mb-4 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.4px] text-[#64748b] hover:text-[#1a2d5a]">
@@ -295,13 +310,25 @@ export default function ShipmentDetailPage() {
             Full manifest information captured from shipment creation.
           </p>
         </div>
-        <Link
-          href={`/shipments/${shipment.id}/edit`}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#1a2d5a] px-4 text-sm font-bold text-white"
-        >
-          <Edit size={16} strokeWidth={2.3} />
-          Edit
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => printShipmentReceipt(shipment)}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#1a2d5a] bg-white px-4 text-sm font-bold text-[#1a2d5a] hover:bg-[#f0f4ff]"
+          >
+            <Printer size={16} strokeWidth={2.3} />
+            Print Receipt
+          </button>
+          {!isReportingLocked(shipment.status, shipment.deliveryStatus) && (
+            <Link
+              href={`/shipments/${shipment.id}/edit`}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#1a2d5a] px-4 text-sm font-bold text-white"
+            >
+              <Edit size={16} strokeWidth={2.3} />
+              Edit
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="space-y-5">
@@ -341,7 +368,12 @@ export default function ShipmentDetailPage() {
           <DetailCard label="Destination Address" value={details.destinationAddress || "N/A"} />
         </Section>
 
-        <ShipmentRouteMap originAirport={originAirport} destAirport={destAirport} />
+        <ShipmentRouteMap
+          originAirport={originAirport}
+          destAirport={destAirport}
+          status={shipment.status}
+          deliveryStatus={shipment.deliveryStatus}
+        />
 
         <Section icon={<Package size={18} strokeWidth={2.4} />} title="Cargo And Delivery">
           <DetailCard label="Priority Level" value={formatPriority(shipment.priority)} />

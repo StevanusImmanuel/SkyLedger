@@ -1,21 +1,29 @@
 'use client';
 
-import { Suspense, useCallback, useRef, useState, useEffect } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
+import type { MutableRefObject } from 'react';
 import Link from 'next/link';
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import { ShipmentMap } from '@/components/dashboard/ShipmentMap';
+import dynamic from 'next/dynamic';
 import { RouteTableSkeleton, ChartSkeleton } from '@/components/ui/skeletons';
 import { PageTitle } from '@/components/ui/page-title';
+
+const ShipmentMap = dynamic(
+  () => import('@/components/dashboard/ShipmentMap').then((mod) => mod.ShipmentMap),
+  {
+    ssr: false,
+    loading: () => <ChartSkeleton />,
+  }
+);
+
+const MapLibreDashboardWrapper = dynamic(
+  () => import('@/components/maps/MapLibreDashboardWrapper'),
+  {
+    ssr: false,
+    loading: () => <ChartSkeleton />,
+  }
+);
+
+const USE_MAPLIBRE_DASHBOARD_MAP = true;
 
 type ShipmentMapData = {
   id: string;
@@ -48,168 +56,189 @@ type DashboardData = {
   }>;
 };
 
-type DashboardApiResponse = {
-  success?: boolean;
-  data?: DashboardData;
-  error?: string;
+type DashboardApiResponse =
+  | { success: true; data: DashboardData }
+  | { success?: false; error?: string };
+
+type DashboardFetchResult =
+  | { ok: true; data: DashboardData }
+  | { ok: false; message: string; stopPolling?: boolean; redirectTo?: string };
+
+type DashboardDebugInfo = {
+  status?: number;
+  contentType?: string;
+  redirected?: boolean;
+  url?: string;
+  snippet?: string;
+  reason: string;
 };
 
-const DASHBOARD_ERROR_MESSAGE = 'Dashboard data is temporarily unavailable.';
-
-function formatPriorityLabel(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+function isJsonResponse(response: Response) {
+  return response.headers.get('content-type')?.toLowerCase().includes('application/json') ?? false;
 }
 
-function DeliveredWeightChart({ data }: { data: DashboardData['deliveredWeightByDate'] }) {
-  if (data.length === 0) {
-    return (
-      <div className="sl-chart-card">
-        <div className="sl-chart-header">
-          <div>
-            <p className="sl-chart-title">Late-Stage Cargo Weight</p>
-            <p className="sl-chart-subtitle">Total shipment weight for delivered, arrived, and out-for-delivery cargo by date</p>
-          </div>
-        </div>
-        <div className="sl-chart-empty">No late-stage cargo weight data available yet.</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="sl-chart-card">
-      <div className="sl-chart-header">
-        <div>
-          <p className="sl-chart-title">Late-Stage Cargo Weight</p>
-          <p className="sl-chart-subtitle">Total shipment weight for delivered, arrived, and out-for-delivery cargo by date</p>
-        </div>
-      </div>
-      <div className="sl-dashboard-chart-body">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="deliveredWeightFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#1a2d5a" stopOpacity={0.24} />
-                <stop offset="95%" stopColor="#1a2d5a" stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="#e8edf4" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} width={42} />
-            <Tooltip
-              formatter={(value) => [`${Number(value).toLocaleString()} kg`, 'Weight']}
-              labelFormatter={(label) => `Date: ${label}`}
-            />
-            <Area
-              type="monotone"
-              dataKey="weightKg"
-              stroke="#1a2d5a"
-              strokeWidth={2}
-              fill="url(#deliveredWeightFill)"
-              dot={{ r: 3, strokeWidth: 2 }}
-              activeDot={{ r: 5 }}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
+function createSnippet(value: string) {
+  return value.replace(/\s+/g, ' ').trim().slice(0, 120);
 }
 
-function ActivePriorityChart({ data }: { data: DashboardData['activeShipmentsByPriority'] }) {
-  const visiblePriorityData = data.filter((item) => item.priority !== 'other');
-  const totalActive = visiblePriorityData.reduce((sum, item) => sum + item.count, 0);
+async function warnDashboardFetchOnce(
+  warningKeyRef: MutableRefObject<string>,
+  info: DashboardDebugInfo
+) {
+  const warningKey = [
+    info.reason,
+    info.status,
+    info.contentType,
+    info.redirected,
+    info.url,
+    info.snippet,
+  ].join('|');
 
-  if (visiblePriorityData.length === 0 || totalActive === 0) {
-    return (
-      <div className="sl-chart-card">
-        <div className="sl-chart-header">
-          <div>
-            <p className="sl-chart-title">Active Shipments by Priority</p>
-            <p className="sl-chart-subtitle">Current active cargo workload grouped by shipment priority</p>
-          </div>
-        </div>
-        <div className="sl-chart-empty">No active priority shipment data available.</div>
-      </div>
-    );
+  if (warningKeyRef.current === warningKey) return;
+  warningKeyRef.current = warningKey;
+
+  console.warn('[Dashboard] Analytics fetch did not return usable JSON.', info);
+}
+
+async function readDashboardResponse(
+  response: Response,
+  warningKeyRef: MutableRefObject<string>
+): Promise<DashboardFetchResult> {
+  const contentType = response.headers.get('content-type') || '';
+  const responseMeta = {
+    status: response.status,
+    contentType,
+    redirected: response.redirected,
+    url: response.url,
+  };
+
+  if (response.redirected && response.url.includes('/login/restricted')) {
+    await warnDashboardFetchOnce(warningKeyRef, {
+      ...responseMeta,
+      reason: 'redirected-to-restricted',
+    });
+
+    return {
+      ok: false,
+      message: 'Dashboard data belum bisa dimuat. Silakan login ulang.',
+      stopPolling: true,
+      redirectTo: '/login/restricted',
+    };
   }
 
-  const chartData = visiblePriorityData.map((item) => ({
-    ...item,
-    label: formatPriorityLabel(item.priority),
-  }));
+  if (!isJsonResponse(response)) {
+    const text = await response.text().catch(() => '');
 
-  return (
-    <div className="sl-chart-card">
-      <div className="sl-chart-header">
-        <div>
-          <p className="sl-chart-title">Active Shipments by Priority</p>
-          <p className="sl-chart-subtitle">Current active cargo workload grouped by shipment priority</p>
-        </div>
-      </div>
-      <div className="sl-dashboard-chart-body">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="#e8edf4" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} width={34} />
-            <Tooltip formatter={(value) => [Number(value).toLocaleString(), 'Shipments']} />
-            <Bar dataKey="count" fill="#1a2d5a" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
+    await warnDashboardFetchOnce(warningKeyRef, {
+      ...responseMeta,
+      reason: 'non-json-response',
+      snippet: createSnippet(text),
+    });
+
+    return {
+      ok: false,
+      message: 'Dashboard data belum bisa dimuat. Silakan refresh atau login ulang.',
+      stopPolling: response.status === 401 || response.status === 403 || response.redirected,
+    };
+  }
+
+  let payload: DashboardApiResponse;
+  try {
+    payload = await response.json();
+  } catch {
+    await warnDashboardFetchOnce(warningKeyRef, {
+      ...responseMeta,
+      reason: 'invalid-json-body',
+    });
+
+    return {
+      ok: false,
+      message: 'Dashboard data belum bisa dimuat. Silakan refresh atau login ulang.',
+      stopPolling: !response.ok,
+    };
+  }
+
+  if (payload.success === true) {
+    return { ok: true, data: payload.data };
+  }
+
+  if (!response.ok || payload.success === false) {
+    await warnDashboardFetchOnce(warningKeyRef, {
+      ...responseMeta,
+      reason: 'json-error-response',
+      snippet: payload.error,
+    });
+
+    return {
+      ok: false,
+      message: payload.error || 'Dashboard data belum bisa dimuat. Silakan refresh atau login ulang.',
+      stopPolling: response.status === 401 || response.status === 403,
+      redirectTo: response.status === 401 ? '/login/restricted' : undefined,
+    };
+  }
+
+  return {
+    ok: false,
+    message: 'Dashboard data belum bisa dimuat. Silakan refresh atau login ulang.',
+  };
 }
 
 function DashboardContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
-  const [error, setError] = useState('');
-  const hasDataRef = useRef(false);
+  const [dashboardError, setDashboardError] = useState('');
+  const shouldStopPollingRef = useRef(false);
+  const dashboardWarningKeyRef = useRef('');
 
-  const shipments = data?.shipmentMapData || [];
-  const deliveredWeightByDate = data?.deliveredWeightByDate || [];
-  const activeShipmentsByPriority = data?.activeShipmentsByPriority || [];
-
-  const fetchDashboard = useCallback(async () => {
-    if (!hasDataRef.current) setIsLoading(true);
-    try {
-      const res = await fetch('/api/dashboard/analytics', {
-        headers: { Accept: 'application/json' },
-      });
-      const contentType = res.headers.get('content-type') || '';
-
-      if (!contentType.includes('application/json')) {
-        await res.text();
-        throw new Error(DASHBOARD_ERROR_MESSAGE);
-      }
-
-      const json = (await res.json()) as DashboardApiResponse;
-      if (!res.ok || !json.success || !json.data) {
-        throw new Error(json.error || DASHBOARD_ERROR_MESSAGE);
-      }
-
-      setData(json.data);
-      hasDataRef.current = true;
-      setError('');
-    } catch {
-      setError(DASHBOARD_ERROR_MESSAGE);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const shipmentMapData = data?.shipmentMapData || [];
 
   useEffect(() => {
-    // Initial fetch
-    fetchDashboard();
+    async function fetchDashboard(showLoading = false) {
+      if (shouldStopPollingRef.current) return;
+      if (showLoading) setIsLoading(true);
 
-    // Poll every 30 seconds to keep data fresh
-    const interval = setInterval(() => {
-      fetchDashboard();
-    }, 30000);
+      try {
+        const res = await fetch('/api/dashboard/analytics', {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        });
+        const result = await readDashboardResponse(res, dashboardWarningKeyRef);
 
-    return () => clearInterval(interval);
-  }, [fetchDashboard]);
+        if (result.ok) {
+          setData(result.data);
+          setDashboardError('');
+          dashboardWarningKeyRef.current = '';
+        } else {
+          setDashboardError(result.message);
+
+          if (result.stopPolling) {
+            shouldStopPollingRef.current = true;
+          }
+
+          if (result.redirectTo && typeof window !== 'undefined') {
+            window.location.assign(result.redirectTo);
+          }
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error && err.name === 'AbortError'
+            ? 'Dashboard request timed out. Please try again.'
+            : 'Dashboard data belum bisa dimuat. Silakan refresh atau login ulang.';
+        await warnDashboardFetchOnce(dashboardWarningKeyRef, {
+          reason: err instanceof Error ? `fetch-error:${err.name}` : 'fetch-error',
+          snippet: err instanceof Error ? createSnippet(err.message) : undefined,
+        });
+        setDashboardError(message);
+      } finally {
+        if (showLoading) setIsLoading(false);
+      }
+    }
+
+    // Initial fetch only — user refreshes manually
+    fetchDashboard(true);
+
+    return () => {};
+  }, []);
 
   if (!data && !isLoading) {
     return (
@@ -217,14 +246,9 @@ function DashboardContent() {
         <PageTitle title="Dashboard" />
         <div className="sl-page-header">
           <h1 className="sl-page-title">Operations Analytics</h1>
-          <p className="sl-page-subtitle">{error || DASHBOARD_ERROR_MESSAGE}</p>
-          <button
-            type="button"
-            onClick={fetchDashboard}
-            className="mt-4 inline-flex items-center justify-center rounded-lg bg-[#1a2d5a] px-4 py-2 text-xs font-bold uppercase tracking-[0.4px] text-white"
-          >
-            Retry Dashboard
-          </button>
+          <p className="sl-page-subtitle">
+            {dashboardError || 'Dashboard data belum bisa dimuat. Silakan refresh atau login ulang.'}
+          </p>
         </div>
       </div>
     );
@@ -236,31 +260,18 @@ function DashboardContent() {
       {/* Page Header */}
       <div className="sl-page-header">
         <h1 className="sl-page-title">Operations Analytics</h1>
-        <p className="sl-page-subtitle">Real-time performance metrics for Global Hub A-42</p>
-        {error && (
-          <p className="mt-2 text-xs font-semibold text-[#b45309]">
-            {error} Showing the last available dashboard snapshot.
-          </p>
-        )}
+        <p className="sl-page-subtitle">
+          {dashboardError || 'Real-time performance metrics for Global Hub A-42'}
+        </p>
       </div>
 
       {/* Shipment Map */}
       {isLoading ? (
         <ChartSkeleton />
+      ) : USE_MAPLIBRE_DASHBOARD_MAP ? (
+        <MapLibreDashboardWrapper shipments={shipmentMapData} />
       ) : (
-        <ShipmentMap shipments={shipments} />
-      )}
-
-      {isLoading ? (
-        <div className="sl-charts-grid">
-          <ChartSkeleton />
-          <ChartSkeleton />
-        </div>
-      ) : (
-        <div className="sl-charts-grid">
-          <DeliveredWeightChart data={deliveredWeightByDate} />
-          <ActivePriorityChart data={activeShipmentsByPriority} />
-        </div>
+        <ShipmentMap shipments={shipmentMapData} />
       )}
 
       {/* Top Operational Routes Table */}

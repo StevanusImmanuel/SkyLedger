@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { shipments } from '@/lib/db/schema';
+import { shipments, airports } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
 import { inArray } from 'drizzle-orm';
+
+function logDatabaseConnectionError(context: string, error: unknown) {
+  console.error(context, {
+    name: error instanceof Error ? error.name : 'UnknownError',
+    message: error instanceof Error ? error.message : 'Unknown database error',
+  });
+}
 
 async function getAuthUser(req: NextRequest) {
   const token = req.cookies.get('terminal_session')?.value;
@@ -88,6 +95,20 @@ const AIRPORT_COORDINATES: Record<string, { lat: number; lng: number }> = {
 };
 
 export async function GET(request: NextRequest) {
+  let user;
+
+  try {
+    user = await getAuthUser(request);
+  } catch (error) {
+    logDatabaseConnectionError('[GET /api/dashboard/analytics] session lookup failed', error);
+    return NextResponse.json(
+      { success: false, error: 'Database connection failed' },
+      { status: 500 }
+    );
+  }
+
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const user = await getAuthUser(request);
     if (!user) {

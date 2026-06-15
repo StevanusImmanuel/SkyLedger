@@ -1,7 +1,20 @@
 import type { NextConfig } from "next";
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
+import path from "node:path";
 
-const nextConfig: NextConfig = {
+const projectRoot = path.resolve(__dirname);
+
+const createNextConfig = (phase: string): NextConfig => ({
   /* config options here */
+
+  ...(phase === PHASE_DEVELOPMENT_SERVER
+    ? {
+        // Keep Turbopack dev scoped to this project instead of the iCloudDocs parent.
+        turbopack: {
+          root: projectRoot,
+        },
+      }
+    : {}),
 
   // Enable styled-components compiler to fix hydration issues
   compiler: {
@@ -27,33 +40,6 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '2mb',
     },
   },
+});
 
-  // Security Headers
-  async headers() {
-    return [
-      {
-        source: '/(.*)',
-        headers: [
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin',
-          },
-          {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
-          },
-        ],
-      },
-    ];
-  },
-};
-
-export default nextConfig;
+export default createNextConfig;

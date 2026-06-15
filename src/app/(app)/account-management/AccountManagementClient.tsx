@@ -7,6 +7,7 @@ import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { useNotifications } from '@/components/ui/notification-provider';
 import { PageTitle } from '@/components/ui/page-title';
 import { FormError } from '@/components/ui/form-error';
+import { StatCardSkeleton, UserTableSkeleton } from '@/components/ui/skeletons';
 import { apiFetch } from '@/lib/api-client';
 
 type UserRole = 'admin' | 'operator' | 'viewer';
@@ -339,38 +340,48 @@ export default function AccountManagementClient() {
       </div>
 
       <div className="sl-reports-stats">
-        <div className="sl-rstat-card">
-          <div className="sl-rstat-label">Total Users</div>
-          <div className="sl-rstat-value-row">
-            <span className="sl-rstat-value">{users.length}</span>
-          </div>
-        </div>
-        <div className="sl-rstat-card">
-          <div className="sl-rstat-label">Active</div>
-          <div className="sl-rstat-value-row">
-            <span className="sl-rstat-value">{users.filter((user) => user.isActive).length}</span>
-          </div>
-        </div>
-        <div className="sl-rstat-card">
-          <div className="sl-rstat-label">Admins</div>
-          <div className="sl-rstat-value-row">
-            <span className="sl-rstat-value">{users.filter((user) => user.role === 'admin').length}</span>
-          </div>
-        </div>
-        <div className="sl-rstat-card">
-          <div className="sl-rstat-label">Operators</div>
-          <div className="sl-rstat-value-row">
-            <span className="sl-rstat-value">{users.filter((user) => user.role === 'operator').length}</span>
-          </div>
-        </div>
+        {isLoading ? (
+          <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </>
+        ) : (
+          <>
+            <div className="sl-rstat-card">
+              <div className="sl-rstat-label">Total Users</div>
+              <div className="sl-rstat-value-row">
+                <span className="sl-rstat-value">{users.length}</span>
+              </div>
+            </div>
+            <div className="sl-rstat-card">
+              <div className="sl-rstat-label">Active</div>
+              <div className="sl-rstat-value-row">
+                <span className="sl-rstat-value">{users.filter((user) => user.isActive).length}</span>
+              </div>
+            </div>
+            <div className="sl-rstat-card">
+              <div className="sl-rstat-label">Admins</div>
+              <div className="sl-rstat-value-row">
+                <span className="sl-rstat-value">{users.filter((user) => user.role === 'admin').length}</span>
+              </div>
+            </div>
+            <div className="sl-rstat-card">
+              <div className="sl-rstat-label">Operators</div>
+              <div className="sl-rstat-value-row">
+                <span className="sl-rstat-value">{users.filter((user) => user.role === 'operator').length}</span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
+      {isLoading ? (
+        <UserTableSkeleton rows={6} />
+      ) : (
       <div className="sl-awb-table-container">
-        {isLoading ? (
-          <div style={{ padding: 24, color: '#64748b', fontSize: 13, fontWeight: 600 }}>
-            Loading users...
-          </div>
-        ) : error && users.length === 0 ? (
+        {error && users.length === 0 ? (
           <div style={{ padding: 24, color: '#b91c1c', fontSize: 13, fontWeight: 700 }}>
             {error}
           </div>
@@ -456,6 +467,7 @@ export default function AccountManagementClient() {
           </table>
         )}
       </div>
+      )}
 
       {isModalOpen && (
         <div

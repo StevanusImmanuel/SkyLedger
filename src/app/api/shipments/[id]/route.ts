@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { shipments, shipmentEvents, airports, flights } from '@/lib/db/schema';
+import { shipments, shipmentEvents, airports, flights, airplanes } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
 import {
   calculateShippingFee,
   formatShippingFee,
   isShipmentPriority,
 } from '@/lib/shipments/shipping-fee';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql, ne, inArray } from 'drizzle-orm';
 import { logActivity } from '@/lib/activity-logger';
+import { canTransition, isReportingLocked, type ShipmentStatus } from '@/lib/shipments/status-flow';
 
 async function getAuthUser(req: NextRequest) {
   const token = req.cookies.get('terminal_session')?.value;
@@ -134,10 +135,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         weightKg: true,
         notes: true,
         updatedAt: true,
+        status: true,
+        deliveryStatus: true,
       },
     });
 
     if (!existingShipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
+
+    // Guard: reporting-eligible shipments (closed/cancelled/delivered and delivered-equivalent
+    // delivery statuses) are permanently read-only — no edit, no delete, no status change.
+    if (isReportingLocked(existingShipment.status, existingShipment.deliveryStatus)) {
+      return NextResponse.json(
+        { error: 'This shipment has been finalized and can no longer be modified.' },
+        { status: 403 }
+      );
+    }
 
     // Check for concurrent update conflict
     if (originalUpdatedAt) {
@@ -172,7 +184,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     // Map delivery status to shipment status and delivery_status enum
     if (deliveryStatus) {
-      type ShipmentStatus = 'pending' | 'processing' | 'in_transit' | 'delivered' | 'delayed' | 'cancelled';
+      type ShipmentStatus = 'pending' | 'processing' | 'in_transit' | 'delivered' | 'delayed' | 'cancelled' | 'closed';
       type DeliveryStatusEnum = 'booked' | 'received_at_warehouse' | 'security_cleared' | 'manifested' | 'departed' | 'transshipment' | 'arrived_at_destination' | 'out_for_delivery' | 'ready_for_pickup' | 'delivered';
 
       const statusMap: Record<string, { shipmentStatus: ShipmentStatus; deliveryStatusEnum: DeliveryStatusEnum }> = {
@@ -186,10 +198,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         'Out for Delivery': { shipmentStatus: 'processing', deliveryStatusEnum: 'out_for_delivery' },
         'Ready for Pickup': { shipmentStatus: 'processing', deliveryStatusEnum: 'ready_for_pickup' },
         'Delivered': { shipmentStatus: 'delivered', deliveryStatusEnum: 'delivered' },
+        'Closed': { shipmentStatus: 'closed', deliveryStatusEnum: 'delivered' },
+        'Canceled': { shipmentStatus: 'cancelled', deliveryStatusEnum: 'booked' },
+        'Cancelled': { shipmentStatus: 'cancelled', deliveryStatusEnum: 'booked' },
       };
 
       const mapped = statusMap[deliveryStatus];
       if (mapped) {
+        // Enforce allowed status-flow transitions
+        const from = existingShipment.status as ShipmentStatus;
+        const to = mapped.shipmentStatus as ShipmentStatus;
+        if (!canTransition(from, to)) {
+          return NextResponse.json(
+            { error: `Invalid status transition: cannot move from "${from}" to "${to}".` },
+            { status: 400 }
+          );
+        }
+
         updateData.status = mapped.shipmentStatus;
         updateData.deliveryStatus = mapped.deliveryStatusEnum;
 
@@ -222,6 +247,120 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         where: eq(airports.iataCode, destIata),
       });
       if (destAirport) updateData.destAirportId = destAirport.id;
+    }
+
+    // Update flight if airplane changed
+    if (airplaneId) {
+      let availableFlight = await db.query.flights.findFirst({
+        where: and(
+          eq(flights.airplaneId, airplaneId),
+          eq(flights.status, 'scheduled')
+        ),
+      });
+
+      // If no scheduled flight exists, create one
+      if (!availableFlight) {
+        const originAirportForFlight = originIata
+          ? await db.query.airports.findFirst({ where: eq(airports.iataCode, originIata) })
+          : null;
+        const destAirportForFlight = destIata
+          ? await db.query.airports.findFirst({ where: eq(airports.iataCode, destIata) })
+          : null;
+
+        const [newFlight] = await db
+          .insert(flights)
+          .values({
+            airplaneId: airplaneId,
+            originAirportId: originAirportForFlight?.id,
+            destAirportId: destAirportForFlight?.id,
+            status: 'scheduled',
+          })
+          .returning();
+        availableFlight = newFlight;
+      }
+
+      if (availableFlight) updateData.flightId = availableFlight.id;
+
+      // Capacity validation on edit
+      const airplane = await db.query.airplanes.findFirst({
+        where: eq(airplanes.airplaneId, airplaneId),
+      });
+
+      if (airplane?.maxWeightKg && availableFlight) {
+        const maxWeight = Number(airplane.maxWeightKg);
+        const [{ value: currentLoad }] = await db
+          .select({ value: sql<string>`COALESCE(SUM(CAST(${shipments.weightKg} AS NUMERIC)), 0)` })
+          .from(shipments)
+          .where(
+            and(
+              eq(shipments.flightId, availableFlight.id),
+              ne(shipments.id, id),
+              inArray(shipments.status, ['pending', 'processing', 'in_transit'])
+            )
+          );
+
+        const existingWeight = Number(currentLoad);
+        if ((existingWeight + nextProductWeight) > maxWeight) {
+          // Find alternative airplanes from the same airline with sufficient capacity
+          const activeWeightSubquery = db
+            .select({
+              airplaneId: flights.airplaneId,
+              totalWeight: sql<number>`SUM(CAST(${shipments.weightKg} AS NUMERIC))`.as('total_weight'),
+            })
+            .from(shipments)
+            .innerJoin(flights, eq(shipments.flightId, flights.id))
+            .where(
+              and(
+                inArray(flights.status, ['scheduled', 'departed']),
+                inArray(shipments.status, ['pending', 'processing', 'in_transit'])
+              )
+            )
+            .groupBy(flights.airplaneId)
+            .as('aw');
+
+          const allAlternativePlanes = await db
+            .select({
+              airplaneId: airplanes.airplaneId,
+              flightNumber: airplanes.flightNumber,
+              model: airplanes.model,
+              maxWeightKg: airplanes.maxWeightKg,
+              utilizedWeight: sql<number>`COALESCE(${activeWeightSubquery.totalWeight}, 0)`,
+            })
+            .from(airplanes)
+            .leftJoin(activeWeightSubquery, eq(airplanes.airplaneId, activeWeightSubquery.airplaneId))
+            .where(
+              and(
+                eq(airplanes.airlineId, airplane.airlineId),
+                ne(airplanes.airplaneId, airplaneId)
+              )
+            );
+
+          // Map and filter alternatives that can safely accommodate the shipment
+          const recommendations = allAlternativePlanes
+            .map(plane => {
+              const limitWeight = Number(plane.maxWeightKg || 0);
+              const utilized = Number(plane.utilizedWeight);
+              const remaining = limitWeight - utilized;
+              const utilizationPct = limitWeight > 0 ? (utilized / limitWeight) * 100 : 0;
+              return {
+                airplaneId: plane.airplaneId,
+                flightNumber: plane.flightNumber,
+                model: plane.model,
+                maxWeightKg: plane.maxWeightKg,
+                utilizedWeight: utilized,
+                remainingCapacity: remaining,
+                utilizationPercentage: utilizationPct,
+              };
+            })
+            .filter(plane => plane.remainingCapacity >= nextProductWeight)
+            .sort((a, b) => Number(a.maxWeightKg) - Number(b.maxWeightKg)); // Best fit: smallest airplane capacity first
+
+          return NextResponse.json({
+            error: `Airplane ${airplane.flightNumber} capacity exceeded. Max: ${maxWeight}kg, current load: ${existingWeight.toFixed(1)}kg, shipment: ${nextProductWeight}kg`,
+            recommendations,
+          }, { status: 400 });
+        }
+      }
     }
 
     let updatedNotes = typeof notes === 'string' ? notes : existingShipment.notes || '';
@@ -336,11 +475,16 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     // Get shipment info before deleting
     const shipment = await db.query.shipments.findFirst({
       where: eq(shipments.id, id),
-      columns: { awbNumber: true },
+      columns: { awbNumber: true, status: true, deliveryStatus: true },
     });
 
     if (!shipment) {
       return NextResponse.json({ error: 'Shipment not found or already deleted' }, { status: 404 });
+    }
+
+    // Guard: reporting-eligible shipments cannot be deleted
+    if (isReportingLocked(shipment.status, shipment.deliveryStatus)) {
+      return NextResponse.json({ error: 'This shipment has been finalized and can no longer be deleted.' }, { status: 403 });
     }
 
     // Hard delete - cascade will delete related shipment_events

@@ -1,12 +1,12 @@
 import "./globals.css";
 import "./dark-theme.css";
-import { Inter } from "next/font/google";
+// import { Inter } from "next/font/google";
 import { NotificationProvider } from "@/components/ui/notification-provider";
 import { StructuredData } from "@/components/seo/structured-data";
 import { siteConfig } from "@/config/site";
 import type { Metadata } from "next";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = { className: "" };
 
 export const viewport = "width=device-width, initial-scale=1.0, maximum-scale=5.0";
 

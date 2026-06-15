@@ -6,11 +6,13 @@ import { useDebounce } from '@/lib/hooks/useDebounce';
 import { Pagination } from '@/components/ui/Pagination';
 import { ShipmentTableSkeleton, StatCardSkeleton } from '@/components/ui/skeletons';
 import { MenuItem, MenuContainer } from '@/components/ui/fluid-menu';
-import { MoreVertical, Eye, Edit, Trash2, X } from 'lucide-react';
+import { MoreVertical, Eye, Edit, Trash2, X, Printer } from 'lucide-react';
 import { useNotifications } from '@/components/ui/notification-provider';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { PageTitle } from '@/components/ui/page-title';
 import { apiFetch } from '@/lib/api-client';
+import { printShipmentReceipt } from '@/lib/utils/receipt';
+import { isReportingLocked } from '@/lib/shipments/status-flow';
 
 type Shipment = {
   id: string;
@@ -22,7 +24,7 @@ type Shipment = {
     airplane: { flightNumber: string } | null;
   } | null;
   priority: 'standard' | 'express' | 'critical';
-  status: 'pending' | 'processing' | 'in_transit' | 'delivered' | 'delayed' | 'cancelled';
+  status: 'pending' | 'processing' | 'in_transit' | 'delivered' | 'delayed' | 'cancelled' | 'closed';
   deliveryStatus: 'booked' | 'received_at_warehouse' | 'security_cleared' | 'manifested' | 'departed' | 'transshipment' | 'arrived_at_destination' | 'out_for_delivery' | 'ready_for_pickup' | 'delivered' | null;
   weightKg: string;
   productType: string | null;
@@ -46,6 +48,7 @@ const statusIndicatorMap: Record<string, string> = {
   processing: '#8b5cf6',
   delivered: '#10b981',
   cancelled: '#ef4444',
+  closed: '#94a3b8',
   // Delivery status colors
   booked: '#8b5cf6',
   received_at_warehouse: '#8b5cf6',
@@ -65,6 +68,7 @@ const statusClassMap: Record<string, string> = {
   processing: 'sl-badge-manifested',
   delivered: 'sl-badge-ontime',
   cancelled: 'sl-badge-delayed',
+  closed: 'sl-badge-closed',
   // Delivery status classes
   booked: 'sl-badge-manifested',
   received_at_warehouse: 'sl-badge-manifested',
@@ -84,10 +88,19 @@ const airportColorMap: Record<string, string> = {
 };
 
 function formatShipmentStatus(shipment: Shipment) {
+  if (shipment.status === 'closed') return 'Closed';
+  if (shipment.status === 'cancelled') return 'Canceled';
   return shipment.deliveryStatus
     ? shipment.deliveryStatus.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
     : shipment.status.replace('_', '-').toUpperCase();
 }
+
+const isFinalizedShipment = (s: Shipment) => isReportingLocked(s.status, s.deliveryStatus);
+
+// For badge color: only the terminal true-statuses (closed/cancelled) override the
+// delivery-status color key. Delivered-equivalent delivery statuses keep their own color.
+const statusColorKey = (s: Shipment) =>
+  s.status === 'closed' || s.status === 'cancelled' ? s.status : (s.deliveryStatus || s.status);
 
 function formatShipmentDate(date: string) {
   return new Date(date).toLocaleString();
@@ -106,6 +119,7 @@ function getShipmentPartyName(notes: string | null, label: 'Sender' | 'Receiver'
 function ShipmentsContent() {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isTableLoading, setIsTableLoading] = useState(false);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
   const [total, setTotal] = useState(0);
@@ -120,7 +134,7 @@ function ShipmentsContent() {
     arrivedPercentage: 0,
     totalWeight: 0,
   });
-  const itemsPerPage = 6;
+  const itemsPerPage = 10;
   const debouncedSearch = useDebounce(search, 800);
   const router = useRouter();
   const { addNotification } = useNotifications();
@@ -130,6 +144,28 @@ function ShipmentsContent() {
   const handleDelete = async (shipmentId: string) => {
     setShipmentToDelete(shipmentId);
     setShowDeleteModal(true);
+  };
+
+  const handlePrintReceipt = async (shipmentId: string) => {
+    try {
+      const res = await apiFetch(`/api/shipments/${shipmentId}`);
+      const json = await res.json();
+      if (json.success) {
+        printShipmentReceipt(json.data);
+      } else {
+        addNotification({
+          variant: 'destructive',
+          title: 'Could not print receipt',
+          description: json.error || 'Failed to load shipment data.',
+        });
+      }
+    } catch (err: any) {
+      addNotification({
+        variant: 'destructive',
+        title: 'Could not print receipt',
+        description: err.message || 'Please allow pop-ups and try again.',
+      });
+    }
   };
 
   const handleConfirmDelete = async () => {
@@ -176,7 +212,7 @@ function ShipmentsContent() {
 
   useEffect(() => {
     async function fetchShipments() {
-      setIsLoading(true);
+      setIsTableLoading(true);
       setError(null);
       try {
         const offset = (currentPage - 1) * itemsPerPage;
@@ -192,44 +228,6 @@ function ShipmentsContent() {
         if (json.success) {
           setShipments(json.data);
           setTotal(json.total);
-
-          // Calculate stats from all shipments (not just current page)
-          const allShipmentsRes = await apiFetch('/api/shipments?limit=1000');
-          const allShipmentsJson = await allShipmentsRes.json();
-
-          if (allShipmentsJson.success) {
-            const allShipments = allShipmentsJson.data;
-
-            // Active: before Post-Flight (pending, processing, in_transit)
-            const activeShipments = allShipments.filter((s: Shipment) =>
-              ['pending', 'processing', 'in_transit'].includes(s.status)
-            );
-            const activeCount = activeShipments.length;
-
-            // Arrived: Post-Flight statuses (arrived_at_destination, out_for_delivery, ready_for_pickup, delivered)
-            const arrivedShipments = allShipments.filter((s: Shipment) =>
-              s.deliveryStatus && ['arrived_at_destination', 'out_for_delivery', 'ready_for_pickup', 'delivered'].includes(s.deliveryStatus)
-            );
-            const arrivedCount = arrivedShipments.length;
-
-            // Total weight of active shipments
-            const totalWeight = activeShipments.reduce((sum: number, s: Shipment) =>
-              sum + Number(s.weightKg), 0
-            );
-
-            // Calculate percentages (compare to total)
-            const totalCount = allShipments.length;
-            const activePercentage = totalCount > 0 ? ((activeCount / totalCount) * 100) : 0;
-            const arrivedPercentage = totalCount > 0 ? ((arrivedCount / totalCount) * 100) : 0;
-
-            setStats({
-              active: activeCount,
-              activePercentage: Math.round(activePercentage),
-              arrived: arrivedCount,
-              arrivedPercentage: Math.round(arrivedPercentage),
-              totalWeight: Math.round(totalWeight),
-            });
-          }
         } else {
           setError(json.error || 'Failed to fetch shipments');
           console.error('Shipments API error:', json.error);
@@ -239,15 +237,61 @@ function ShipmentsContent() {
         setError(message);
         console.error('Failed to fetch shipments:', err);
       } finally {
-        setIsLoading(false);
+        setIsTableLoading(false);
       }
     }
     fetchShipments();
   }, [currentPage, debouncedSearch, retryTrigger]);
 
+  // Stats fetched once (and on delete/retry) — not on pagination
+  useEffect(() => {
+    async function fetchStats() {
+      setIsLoading(true);
+      try {
+        const allShipmentsRes = await apiFetch('/api/shipments?limit=1000');
+        const allShipmentsJson = await allShipmentsRes.json();
+
+        if (allShipmentsJson.success) {
+          const allShipments = allShipmentsJson.data;
+
+          const activeShipments = allShipments.filter((s: Shipment) =>
+            ['pending', 'processing', 'in_transit'].includes(s.status)
+          );
+          const activeCount = activeShipments.length;
+
+          const arrivedShipments = allShipments.filter((s: Shipment) =>
+            s.status === 'closed' || (s.deliveryStatus && ['arrived_at_destination', 'out_for_delivery', 'ready_for_pickup', 'delivered'].includes(s.deliveryStatus))
+          );
+          const arrivedCount = arrivedShipments.length;
+
+          const totalWeight = activeShipments.reduce((sum: number, s: Shipment) =>
+            sum + Number(s.weightKg), 0
+          );
+
+          const totalCount = allShipments.length;
+          const activePercentage = totalCount > 0 ? ((activeCount / totalCount) * 100) : 0;
+          const arrivedPercentage = totalCount > 0 ? ((arrivedCount / totalCount) * 100) : 0;
+
+          setStats({
+            active: activeCount,
+            activePercentage: Math.round(activePercentage),
+            arrived: arrivedCount,
+            arrivedPercentage: Math.round(arrivedPercentage),
+            totalWeight: Math.round(totalWeight),
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch stats:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchStats();
+  }, [retryTrigger]);
+
   const totalPages = Math.ceil(total / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const selectedStatusKey = selectedShipment ? selectedShipment.deliveryStatus || selectedShipment.status : '';
+  const selectedStatusKey = selectedShipment ? statusColorKey(selectedShipment) : '';
   const selectedStatusClass = selectedStatusKey ? statusClassMap[selectedStatusKey] || 'sl-badge-manifested' : '';
   const selectedIndicatorColor = selectedStatusKey ? statusIndicatorMap[selectedStatusKey] || '#8b5cf6' : '#8b5cf6';
   const selectedPriorityKey = selectedShipment?.priority.toUpperCase() || '';
@@ -354,8 +398,8 @@ function ShipmentsContent() {
             Retry Loading
           </button>
         </div>
-      ) : isLoading ? (
-        <ShipmentTableSkeleton rows={6} />
+      ) : isTableLoading ? (
+        <ShipmentTableSkeleton rows={10} />
       ) : (
         <div className="sl-awb-table-container" style={{ overflowX: 'auto' }}>
           <table className="sl-table" style={{ minWidth: 980 }}>
@@ -376,7 +420,7 @@ function ShipmentsContent() {
                 const pKey = s.priority.toUpperCase();
                 const bgColor = priorityColor[pKey] || '#f1f5f9';
                 const textColor = priorityColor[`${pKey}TEXT`] || '#475569';
-                const statusKey = s.deliveryStatus || s.status;
+                const statusKey = statusColorKey(s);
                 const statusClass = statusClassMap[statusKey] || 'sl-badge-manifested';
                 const indicatorColor = statusIndicatorMap[statusKey] || '#8b5cf6';
                 const destColor = airportColorMap[s.destAirport?.iataCode || ''] || 'blue';
@@ -464,12 +508,18 @@ function ShipmentsContent() {
                             onClick={() => setSelectedShipment(s)}
                           />
                           <MenuItem
+                            icon={<Printer size={18} strokeWidth={1.5} />}
+                            onClick={() => handlePrintReceipt(s.id)}
+                          />
+                          <MenuItem
                             icon={<Edit size={18} strokeWidth={1.5} />}
-                            onClick={() => router.push(`/shipments/${s.id}/edit`)}
+                            onClick={isFinalizedShipment(s) ? undefined : () => router.push(`/shipments/${s.id}/edit`)}
+                            disabled={isFinalizedShipment(s)}
                           />
                           <MenuItem
                             icon={<Trash2 size={18} strokeWidth={1.5} />}
-                            onClick={() => handleDelete(s.id)}
+                            onClick={isFinalizedShipment(s) ? undefined : () => handleDelete(s.id)}
+                            disabled={isFinalizedShipment(s)}
                           />
                         </MenuContainer>
                       </div>
@@ -573,25 +623,47 @@ function ShipmentsContent() {
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                aria-label="Close shipment detail"
-                onClick={() => setSelectedShipment(null)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 34,
-                  height: 34,
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 8,
-                  background: '#f8fafc',
-                  color: '#64748b',
-                  cursor: 'pointer',
-                }}
-              >
-                <X size={17} strokeWidth={2.2} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => handlePrintReceipt(selectedShipment.id)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    border: '1px solid #1a2d5a',
+                    borderRadius: 8,
+                    background: '#fff',
+                    color: '#1a2d5a',
+                    padding: '8px 16px',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Printer size={15} strokeWidth={2.3} />
+                  Print Receipt
+                </button>
+                <button
+                  type="button"
+                  aria-label="Close shipment detail"
+                  onClick={() => setSelectedShipment(null)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 34,
+                    height: 34,
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 8,
+                    background: '#f8fafc',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <X size={17} strokeWidth={2.2} />
+                </button>
+              </div>
             </div>
 
             <div style={{ padding: 22 }}>

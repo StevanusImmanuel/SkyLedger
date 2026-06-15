@@ -17,6 +17,7 @@ import {
   PanelLeftOpen,
   Users,
   ScrollText,
+  Plane,
 } from "lucide-react";
 import Image from "next/image";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -263,6 +264,22 @@ export function SessionNavBar() {
                         <FileText className="h-4 w-4 shrink-0" strokeWidth={2.5} />
                         <motion.span variants={variants}>
                           Reports
+                        </motion.span>
+                      </Link>
+                      <Link
+                        href="/airplanes"
+                        className={cn(
+                          "relative flex h-8 w-full flex-row items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium text-[#64748b] transition-all hover:bg-[#f1f5f9] hover:text-[#1e293b]",
+                          pathname?.includes("airplanes") &&
+                          "bg-[#f0f4ff] font-semibold text-[#1a2d5a]",
+                        )}
+                      >
+                        {pathname?.includes("airplanes") && (
+                          <div className="absolute bottom-0 left-0 top-0 w-[3px] rounded-r-sm bg-[#1a2d5a]" />
+                        )}
+                        <Plane className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                        <motion.span variants={variants}>
+                          Fleet
                         </motion.span>
                       </Link>
 
