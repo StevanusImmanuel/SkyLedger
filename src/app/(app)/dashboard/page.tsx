@@ -45,6 +45,21 @@ type DashboardData = {
     planeId: string;
     totalWeight: string;
   }>;
+  deliveredWeightByDate: Array<{
+    date: string;
+    weightKg: number;
+    weightMt?: number;
+  }>;
+  activeShipmentsByPriority: Array<{
+    priority: string;
+    count: number;
+  }>;
+};
+
+type DashboardApiResponse = {
+  success?: boolean;
+  data?: DashboardData;
+  error?: string;
 };
 
 type DashboardApiResponse =
@@ -223,7 +238,16 @@ function DashboardContent() {
       } finally {
         if (showLoading) setIsLoading(false);
       }
+
+      setData(json.data);
+      hasDataRef.current = true;
+      setError('');
+    } catch {
+      setError(DASHBOARD_ERROR_MESSAGE);
+    } finally {
+      setIsLoading(false);
     }
+  }, []);
 
     // Initial fetch only — user refreshes manually
     fetchDashboard(true);
@@ -234,6 +258,7 @@ function DashboardContent() {
   if (!data && !isLoading) {
     return (
       <div>
+        <PageTitle title="Dashboard" />
         <div className="sl-page-header">
           <h1 className="sl-page-title">Operations Analytics</h1>
           <p className="sl-page-subtitle">

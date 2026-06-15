@@ -197,12 +197,13 @@ function ShipmentsContent() {
           description: data.error || 'An error occurred while deleting the shipment.',
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to delete shipment:', error);
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.';
       addNotification({
         variant: 'destructive',
         title: 'Failed to delete shipment',
-        description: error.message || 'An unexpected error occurred. Please try again.',
+        description: message,
       });
     } finally {
       setIsDeleting(false);
@@ -231,8 +232,9 @@ function ShipmentsContent() {
           setError(json.error || 'Failed to fetch shipments');
           console.error('Shipments API error:', json.error);
         }
-      } catch (err: any) {
-        setError(err.message || 'Failed to fetch shipments');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch shipments';
+        setError(message);
         console.error('Failed to fetch shipments:', err);
       } finally {
         setIsTableLoading(false);

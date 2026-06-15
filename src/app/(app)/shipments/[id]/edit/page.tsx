@@ -67,10 +67,9 @@ type Shipment = {
   createdAt: string;
   updatedAt: string;
 
-  // Menggunakan tipe any agar aman dari eror TypeScript linting
-  sender_name?: any;
-  receiver_name?: any;
-  telp_number?: any;
+  sender_name?: string | null;
+  receiver_name?: string | null;
+  telp_number?: string | null;
 };
 
 const PRODUCT_TYPES = [
@@ -261,8 +260,6 @@ export default function EditShipmentPage() {
           const telpFromNotes = getNoteValue('Tel');
           const originAddressFromNotes = getNoteValue('Origin');
           const destAddressFromNotes = getNoteValue('Dest');
-          const shippingFeeFromNotes = getNoteValue('Fee');
-
           setFormData({
             deliveryStatus: displayDeliveryStatus,
             productType: shipment.productType || "",
@@ -399,15 +396,16 @@ export default function EditShipmentPage() {
         addNotification({
           variant: 'destructive',
           title: 'Failed to update shipment',
-          description: data.error || 'An error occurred while updating the shipment.',
+          description: data.error || 'Failed to update shipment. Please check your input and try again.',
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to update shipment:', error);
+      const message = error instanceof Error ? error.message : 'Failed to update shipment. Please check your input and try again.';
       addNotification({
         variant: 'destructive',
         title: 'Failed to update shipment',
-        description: error.message || 'An unexpected error occurred. Please try again.',
+        description: message,
       });
     } finally {
       setIsSubmitting(false);

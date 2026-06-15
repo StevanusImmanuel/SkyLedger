@@ -16,6 +16,10 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
+    const token = request.cookies.get('terminal_session')?.value;
+    const user = token ? await getSessionUser(token) : null;
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
     const { searchParams } = new URL(request.url);
     const airlineId = searchParams.get('airlineId');
 

@@ -4,6 +4,7 @@ import { users, passwordResets } from '@/lib/db/schema';
 import { hashPassword } from '@/lib/auth/password';
 import { eq, and, gt } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
+import { isRateLimited } from '@/lib/rate-limit';
 
 // Generate a secure random token
 function generateResetToken(): string {
@@ -14,6 +15,14 @@ function generateResetToken(): string {
 // Request a password reset (generates token)
 export async function POST(request: NextRequest) {
   const action = request.nextUrl.searchParams.get('action');
+
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0].trim() || 
+             request.headers.get('x-real-ip') || 
+             'anonymous';
+
+  if (isRateLimited(ip, 5, 60 * 1000)) { // Limit to 5 attempts per minute per IP
+    return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
+  }
 
   try {
     if (action === 'request') {
@@ -71,8 +80,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Token and password are required' }, { status: 400 });
       }
 
-      if (password.length < 8) {
-        return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
+      const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/;
+      if (!PASSWORD_REGEX.test(password)) {
+        return NextResponse.json({ error: 'Password must be at least 8 characters, contain at least one uppercase letter, and at least one number.' }, { status: 400 });
       }
 
       // Find valid reset token

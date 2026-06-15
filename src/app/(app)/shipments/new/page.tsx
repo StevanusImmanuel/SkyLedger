@@ -340,15 +340,16 @@ export default function NewShipmentPage() {
         addNotification({
           variant: 'destructive',
           title: 'Failed to create shipment',
-          description: data.error || 'An error occurred while creating the shipment.',
+          description: data.error || 'Failed to save shipment. Please check your input and try again.',
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to create shipment:', error);
+      const message = error instanceof Error ? error.message : 'Failed to save shipment. Please check your input and try again.';
       addNotification({
         variant: 'destructive',
         title: 'Failed to create shipment',
-        description: error.message || 'An unexpected error occurred. Please try again.',
+        description: message,
       });
     } finally {
       setIsSubmitting(false);

@@ -99,6 +99,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const user = await getAuthUser(request);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  if (user.role !== 'admin' && user.role !== 'operator') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const { id } = await context.params;
 
   try {
@@ -373,23 +377,59 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
     updateData.notes = updatedNotes;
 
-    await db
-      .update(shipments)
-      .set(updateData)
-      .where(eq(shipments.id, id));
+    // Run writing operations in a database transaction
+    await db.transaction(async (tx) => {
+      // Update flight if airplane changed
+      if (airplaneId) {
+        let availableFlight = await tx.query.flights.findFirst({
+          where: and(
+            eq(flights.airplaneId, airplaneId),
+            eq(flights.status, 'scheduled')
+          ),
+        });
 
-    // Create event if status changed
-    if (deliveryStatus) {
-      type ShipmentEventInsert = typeof shipmentEvents.$inferInsert;
+        // If no scheduled flight exists, create one
+        if (!availableFlight) {
+          const originAirportForFlight = originIata
+            ? await tx.query.airports.findFirst({ where: eq(airports.iataCode, originIata) })
+            : null;
+          const destAirportForFlight = destIata
+            ? await tx.query.airports.findFirst({ where: eq(airports.iataCode, destIata) })
+            : null;
 
-      await db.insert(shipmentEvents).values({
-        shipmentId: id,
-        status: updateData.status as ShipmentEventInsert['status'],
-        location: destinationAddress || originAddress,
-        notes: `Status updated to: ${deliveryStatus}`,
-        changedBy: user.id,
-      });
-    }
+          const [newFlight] = await tx
+            .insert(flights)
+            .values({
+              airplaneId: airplaneId,
+              originAirportId: originAirportForFlight?.id,
+              destAirportId: destAirportForFlight?.id,
+              status: 'scheduled',
+            })
+            .returning();
+          availableFlight = newFlight;
+        }
+
+        if (availableFlight) updateData.flightId = availableFlight.id;
+      }
+
+      await tx
+        .update(shipments)
+        .set(updateData)
+        .where(eq(shipments.id, id));
+
+      // Create event if status changed
+      if (deliveryStatus) {
+        type ShipmentEventInsert = typeof shipmentEvents.$inferInsert;
+
+        await tx.insert(shipmentEvents).values({
+          shipmentId: id,
+          status: updateData.status as ShipmentEventInsert['status'],
+          location: destinationAddress || originAddress,
+          notes: `Status updated to: ${deliveryStatus}`,
+          changedBy: user.id,
+        });
+      }
+    });
 
     // Log shipment update activity
     const shipment = await db.query.shipments.findFirst({
@@ -414,7 +454,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('[PATCH /api/shipments/:id]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to update shipment. Please check your input and try again.' },
+      { status: 500 }
+    );
   }
 }
 

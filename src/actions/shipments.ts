@@ -2,7 +2,7 @@
 
 import { db } from '@/lib/db';
 import { shipments, shipmentEvents, airports } from '@/lib/db/schema';
-import { requireAuth } from '@/lib/auth/dal';
+import { requireRole } from '@/lib/auth/dal';
 import { createShipmentSchema, updateShipmentSchema } from '@/lib/validations/shipment';
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
@@ -21,7 +21,7 @@ async function resolveAirportId(iata: string): Promise<number | null> {
 }
 
 export async function createShipmentAction(_prev: unknown, formData: FormData) {
-  const user = await requireAuth();
+  const user = await requireRole('operator');
 
   const parsed = createShipmentSchema.safeParse({
     awbNumber: formData.get('awbNumber') || undefined,
@@ -76,7 +76,7 @@ export async function updateShipmentAction(
   _prev: unknown,
   formData: FormData,
 ) {
-  const user = await requireAuth();
+  const user = await requireRole('operator');
 
   const parsed = updateShipmentSchema.safeParse({
     status: formData.get('status') || undefined,
