@@ -377,59 +377,25 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
     updateData.notes = updatedNotes;
 
-    // Run writing operations in a database transaction
-    await db.transaction(async (tx) => {
-      // Update flight if airplane changed
-      if (airplaneId) {
-        let availableFlight = await tx.query.flights.findFirst({
-          where: and(
-            eq(flights.airplaneId, airplaneId),
-            eq(flights.status, 'scheduled')
-          ),
-        });
+    // The neon-http driver does not support interactive transactions, so writes run
+    // sequentially. Flight resolution and updateData.flightId are already computed above.
+    await db
+      .update(shipments)
+      .set(updateData)
+      .where(eq(shipments.id, id));
 
-        // If no scheduled flight exists, create one
-        if (!availableFlight) {
-          const originAirportForFlight = originIata
-            ? await tx.query.airports.findFirst({ where: eq(airports.iataCode, originIata) })
-            : null;
-          const destAirportForFlight = destIata
-            ? await tx.query.airports.findFirst({ where: eq(airports.iataCode, destIata) })
-            : null;
+    // Create event if status changed
+    if (deliveryStatus) {
+      type ShipmentEventInsert = typeof shipmentEvents.$inferInsert;
 
-          const [newFlight] = await tx
-            .insert(flights)
-            .values({
-              airplaneId: airplaneId,
-              originAirportId: originAirportForFlight?.id,
-              destAirportId: destAirportForFlight?.id,
-              status: 'scheduled',
-            })
-            .returning();
-          availableFlight = newFlight;
-        }
-
-        if (availableFlight) updateData.flightId = availableFlight.id;
-      }
-
-      await tx
-        .update(shipments)
-        .set(updateData)
-        .where(eq(shipments.id, id));
-
-      // Create event if status changed
-      if (deliveryStatus) {
-        type ShipmentEventInsert = typeof shipmentEvents.$inferInsert;
-
-        await tx.insert(shipmentEvents).values({
-          shipmentId: id,
-          status: updateData.status as ShipmentEventInsert['status'],
-          location: destinationAddress || originAddress,
-          notes: `Status updated to: ${deliveryStatus}`,
-          changedBy: user.id,
-        });
-      }
-    });
+      await db.insert(shipmentEvents).values({
+        shipmentId: id,
+        status: updateData.status as ShipmentEventInsert['status'],
+        location: destinationAddress || originAddress,
+        notes: `Status updated to: ${deliveryStatus}`,
+        changedBy: user.id,
+      });
+    }
 
     // Log shipment update activity
     const shipment = await db.query.shipments.findFirst({
