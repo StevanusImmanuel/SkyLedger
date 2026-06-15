@@ -203,27 +203,31 @@ function FleetContent() {
   // Form validation
   const validateForm = () => {
     const errors: Record<string, string> = {};
-    if (!formData.flightNumber.trim()) errors.flightNumber = 'Flight identifier is required';
-    if (!formData.model.trim()) errors.model = 'Model is required';
-    
-    const capacityVal = Number(formData.capacity);
-    if (!formData.capacity || isNaN(capacityVal) || capacityVal <= 0) {
-      errors.capacity = 'Capacity must be a positive integer';
-    }
 
-    const weightVal = Number(formData.maxWeightKg);
-    if (!formData.maxWeightKg || isNaN(weightVal) || weightVal <= 0) {
-      errors.maxWeightKg = 'Max weight capacity must be a positive number';
-    }
+    // Airline is always required (it's the only editable field when editing).
+    if (!formData.airlineId) errors.airlineId = 'Please select an airline';
 
-    if (formData.maxVolumeM3) {
-      const volVal = Number(formData.maxVolumeM3);
-      if (isNaN(volVal) || volVal <= 0) {
-        errors.maxVolumeM3 = 'Max volume must be a positive number';
+    // When editing, every field except the airline is read-only, so skip their validation.
+    if (!isEditing) {
+      if (!formData.model.trim()) errors.model = 'Model is required';
+
+      const capacityVal = Number(formData.capacity);
+      if (!formData.capacity || !Number.isInteger(capacityVal) || capacityVal <= 0) {
+        errors.capacity = 'Capacity must be a positive integer';
+      }
+
+      const weightVal = Number(formData.maxWeightKg);
+      if (!formData.maxWeightKg || isNaN(weightVal) || weightVal <= 0) {
+        errors.maxWeightKg = 'Max weight capacity must be a positive number';
+      }
+
+      if (formData.maxVolumeM3) {
+        const volVal = Number(formData.maxVolumeM3);
+        if (isNaN(volVal) || volVal <= 0) {
+          errors.maxVolumeM3 = 'Max volume must be a positive number';
+        }
       }
     }
-
-    if (!formData.airlineId) errors.airlineId = 'Please select an airline';
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -660,26 +664,36 @@ function FleetContent() {
 
             <form onSubmit={handleFormSubmit} style={{ padding: 22 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {isEditing && (
+                  <div style={{ background: '#f0f4ff', border: '1px solid #c7d2fe', borderRadius: 8, padding: '10px 12px', fontSize: 12, fontWeight: 600, color: '#1a2d5a' }}>
+                    Only the airline can be changed. All other aircraft specifications are read-only.
+                  </div>
+                )}
                 <div>
-                  <label className="sl-field-label">Flight Number / Identifier *</label>
+                  <label className="sl-field-label">Flight Number / Identifier</label>
                   <input
                     type="text"
                     className="sl-field-input"
-                    placeholder="e.g. SL-203, GA-404"
+                    placeholder="Auto-generated from airline code"
                     value={formData.flightNumber}
-                    onChange={(e) => setFormData({ ...formData, flightNumber: e.target.value })}
+                    readOnly
+                    style={{ background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' }}
                   />
-                  <FormError message={formErrors.flightNumber || ''} />
+                  <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginTop: 4 }}>
+                    {isEditing ? 'Flight number cannot be changed.' : 'Generated automatically from the selected airline code on save.'}
+                  </p>
                 </div>
 
                 <div>
-                  <label className="sl-field-label">Model *</label>
+                  <label className="sl-field-label">Model{isEditing ? '' : ' *'}</label>
                   <input
                     type="text"
                     className="sl-field-input"
                     placeholder="e.g. Boeing 737-800F, Airbus A330"
                     value={formData.model}
                     onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                    readOnly={isEditing}
+                    style={isEditing ? { background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' } : undefined}
                   />
                   <FormError message={formErrors.model || ''} />
                 </div>
@@ -704,12 +718,14 @@ function FleetContent() {
                   </div>
 
                   <div>
-                    <label className="sl-field-label">Capacity (Passengers) *</label>
+                    <label className="sl-field-label">Capacity (Passengers){isEditing ? '' : ' *'}</label>
                     <input
                       type="number"
                       className="sl-field-input"
                       value={formData.capacity}
                       onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
+                      readOnly={isEditing}
+                      style={isEditing ? { background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' } : undefined}
                     />
                     <FormError message={formErrors.capacity || ''} />
                   </div>
@@ -717,25 +733,29 @@ function FleetContent() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <div>
-                    <label className="sl-field-label">Cargo Max Weight (kg) *</label>
+                    <label className="sl-field-label">Cargo Max Weight (kg){isEditing ? '' : ' *'}</label>
                     <input
                       type="number"
                       className="sl-field-input"
                       placeholder="e.g. 15000"
                       value={formData.maxWeightKg}
                       onChange={(e) => setFormData({ ...formData, maxWeightKg: e.target.value })}
+                      readOnly={isEditing}
+                      style={isEditing ? { background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' } : undefined}
                     />
                     <FormError message={formErrors.maxWeightKg || ''} />
                   </div>
 
                   <div>
-                    <label className="sl-field-label">Cargo Max Volume (m³ - Optional)</label>
+                    <label className="sl-field-label">Cargo Max Volume (m³{isEditing ? '' : ' - Optional'})</label>
                     <input
                       type="number"
                       className="sl-field-input"
                       placeholder="e.g. 120"
                       value={formData.maxVolumeM3}
                       onChange={(e) => setFormData({ ...formData, maxVolumeM3: e.target.value })}
+                      readOnly={isEditing}
+                      style={isEditing ? { background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' } : undefined}
                     />
                     <FormError message={formErrors.maxVolumeM3 || ''} />
                   </div>

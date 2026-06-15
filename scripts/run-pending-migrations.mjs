@@ -16,6 +16,8 @@ const pendingFiles = [
   '0003_add_airport_coordinates.sql',
   '0004_add_closed_status.sql',
   '0005_add_airplane_capacity.sql',
+  '0006_add_airplane_is_active.sql',
+  '0007_backfill_airplane_capacity.sql',
 ];
 
 for (const file of pendingFiles) {

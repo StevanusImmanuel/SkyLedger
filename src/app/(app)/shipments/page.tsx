@@ -12,6 +12,7 @@ import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { PageTitle } from '@/components/ui/page-title';
 import { apiFetch } from '@/lib/api-client';
 import { printShipmentReceipt } from '@/lib/utils/receipt';
+import { isReportingLocked } from '@/lib/shipments/status-flow';
 
 type Shipment = {
   id: string;
@@ -88,10 +89,18 @@ const airportColorMap: Record<string, string> = {
 
 function formatShipmentStatus(shipment: Shipment) {
   if (shipment.status === 'closed') return 'Closed';
+  if (shipment.status === 'cancelled') return 'Canceled';
   return shipment.deliveryStatus
     ? shipment.deliveryStatus.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
     : shipment.status.replace('_', '-').toUpperCase();
 }
+
+const isFinalizedShipment = (s: Shipment) => isReportingLocked(s.status, s.deliveryStatus);
+
+// For badge color: only the terminal true-statuses (closed/cancelled) override the
+// delivery-status color key. Delivered-equivalent delivery statuses keep their own color.
+const statusColorKey = (s: Shipment) =>
+  s.status === 'closed' || s.status === 'cancelled' ? s.status : (s.deliveryStatus || s.status);
 
 function formatShipmentDate(date: string) {
   return new Date(date).toLocaleString();
@@ -280,7 +289,7 @@ function ShipmentsContent() {
 
   const totalPages = Math.ceil(total / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const selectedStatusKey = selectedShipment ? (selectedShipment.status === 'closed' ? 'closed' : (selectedShipment.deliveryStatus || selectedShipment.status)) : '';
+  const selectedStatusKey = selectedShipment ? statusColorKey(selectedShipment) : '';
   const selectedStatusClass = selectedStatusKey ? statusClassMap[selectedStatusKey] || 'sl-badge-manifested' : '';
   const selectedIndicatorColor = selectedStatusKey ? statusIndicatorMap[selectedStatusKey] || '#8b5cf6' : '#8b5cf6';
   const selectedPriorityKey = selectedShipment?.priority.toUpperCase() || '';
@@ -409,7 +418,7 @@ function ShipmentsContent() {
                 const pKey = s.priority.toUpperCase();
                 const bgColor = priorityColor[pKey] || '#f1f5f9';
                 const textColor = priorityColor[`${pKey}TEXT`] || '#475569';
-                const statusKey = s.status === 'closed' ? 'closed' : (s.deliveryStatus || s.status);
+                const statusKey = statusColorKey(s);
                 const statusClass = statusClassMap[statusKey] || 'sl-badge-manifested';
                 const indicatorColor = statusIndicatorMap[statusKey] || '#8b5cf6';
                 const destColor = airportColorMap[s.destAirport?.iataCode || ''] || 'blue';
@@ -502,13 +511,13 @@ function ShipmentsContent() {
                           />
                           <MenuItem
                             icon={<Edit size={18} strokeWidth={1.5} />}
-                            onClick={s.status === 'closed' ? undefined : () => router.push(`/shipments/${s.id}/edit`)}
-                            disabled={s.status === 'closed'}
+                            onClick={isFinalizedShipment(s) ? undefined : () => router.push(`/shipments/${s.id}/edit`)}
+                            disabled={isFinalizedShipment(s)}
                           />
                           <MenuItem
                             icon={<Trash2 size={18} strokeWidth={1.5} />}
-                            onClick={s.status === 'closed' ? undefined : () => handleDelete(s.id)}
-                            disabled={s.status === 'closed'}
+                            onClick={isFinalizedShipment(s) ? undefined : () => handleDelete(s.id)}
+                            disabled={isFinalizedShipment(s)}
                           />
                         </MenuContainer>
                       </div>

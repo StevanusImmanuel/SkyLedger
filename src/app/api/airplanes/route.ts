@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
         capacity: airplanes.capacity,
         maxWeightKg: airplanes.maxWeightKg,
         maxVolumeM3: airplanes.maxVolumeM3,
+        isActive: airplanes.isActive,
         airlineId: airplanes.airlineId,
         airlineName: airlines.airlineName,
         airlineCode: airlines.airlineCode,
@@ -80,19 +81,35 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { flightNumber, model, capacity, maxWeightKg, maxVolumeM3, airlineId } = body;
+    const { model, capacity, maxWeightKg, maxVolumeM3, airlineId } = body;
 
-    // Required fields validation
-    if (!flightNumber?.trim() || !model?.trim() || !capacity || !maxWeightKg || !airlineId) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    // Airline is required and must exist — the flight number is derived from its code.
+    if (!airlineId) {
+      return NextResponse.json({ error: 'Please select an airline' }, { status: 400 });
+    }
+    const airline = await db.query.airlines.findFirst({
+      where: eq(airlines.airlineId, Number(airlineId)),
+    });
+    if (!airline) {
+      return NextResponse.json({ error: 'Selected airline does not exist' }, { status: 400 });
+    }
+
+    // Per-field validation
+    if (!model?.trim()) {
+      return NextResponse.json({ error: 'Model is required' }, { status: 400 });
+    }
+    if (capacity === undefined || capacity === null || capacity === '') {
+      return NextResponse.json({ error: 'Passenger capacity is required' }, { status: 400 });
+    }
+    if (maxWeightKg === undefined || maxWeightKg === null || maxWeightKg === '') {
+      return NextResponse.json({ error: 'Cargo weight capacity is required' }, { status: 400 });
     }
 
     const capacityValue = Number(capacity);
     const maxWeightValue = Number(maxWeightKg);
-    const maxVolumeValue = maxVolumeM3 ? Number(maxVolumeM3) : null;
+    const maxVolumeValue = maxVolumeM3 !== undefined && maxVolumeM3 !== null && maxVolumeM3 !== '' ? Number(maxVolumeM3) : null;
 
-    // Capacity validation
-    if (isNaN(capacityValue) || capacityValue <= 0) {
+    if (!Number.isInteger(capacityValue) || capacityValue <= 0) {
       return NextResponse.json({ error: 'Passenger/General capacity must be a positive integer' }, { status: 400 });
     }
     if (isNaN(maxWeightValue) || maxWeightValue <= 0) {
@@ -102,18 +119,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Cargo volume capacity must be a positive number' }, { status: 400 });
     }
 
-    // Check duplicate flightNumber
-    const existing = await db.query.airplanes.findFirst({
-      where: eq(airplanes.flightNumber, flightNumber.trim()),
-    });
-    if (existing) {
-      return NextResponse.json({ error: `Airplane '${flightNumber}' already exists` }, { status: 409 });
+    // Auto-generate a unique flight number from the airline code: e.g. "BA-1391".
+    // Derived from the current max numeric suffix so the identifier stays sequential and
+    // is never supplied (or spoofed) by the client.
+    // Auto-generate a unique flight number from the airline code: e.g. "BA-101".
+    // Numbering is per-airline: derived from the highest existing suffix among that
+    // airline's own aircraft, so each airline has its own sequence. The client never
+    // supplies (or spoofs) the identifier.
+    const [{ maxNum }] = await db
+      .select({
+        maxNum: sql<number>`COALESCE(MAX(NULLIF(regexp_replace(${airplanes.flightNumber}, '\\D', '', 'g'), '')::int), 100)`,
+      })
+      .from(airplanes)
+      .where(eq(airplanes.airlineId, Number(airlineId)));
+
+    let nextNum = Number(maxNum);
+    let flightNumber = '';
+    let isUnique = false;
+    for (let i = 0; i < 10; i++) {
+      nextNum += 1;
+      flightNumber = `${airline.airlineCode}-${nextNum}`;
+      const existing = await db.query.airplanes.findFirst({
+        where: eq(airplanes.flightNumber, flightNumber),
+      });
+      if (!existing) {
+        isUnique = true;
+        break;
+      }
+    }
+    if (!isUnique) {
+      return NextResponse.json({ error: 'Failed to generate a unique flight number. Please try again.' }, { status: 409 });
     }
 
     const [newAirplane] = await db
       .insert(airplanes)
       .values({
-        flightNumber: flightNumber.trim(),
+        flightNumber,
         model: model.trim(),
         capacity: capacityValue,
         maxWeightKg: String(maxWeightValue),

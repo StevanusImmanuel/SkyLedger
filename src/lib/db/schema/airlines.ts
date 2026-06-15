@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, integer, timestamp, numeric } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, integer, timestamp, numeric, boolean } from 'drizzle-orm/pg-core';
 
 export const airlines = pgTable('airlines', {
   airlineId: serial('airline_id').primaryKey(),
@@ -14,6 +14,7 @@ export const airplanes = pgTable('airplanes', {
   capacity: integer('capacity').notNull(),
   maxWeightKg: numeric('max_weight_kg', { precision: 10, scale: 2 }),
   maxVolumeM3: numeric('max_volume_m3', { precision: 10, scale: 2 }),
+  isActive: boolean('is_active').default(true).notNull(),
   airlineId: integer('airline_id').notNull().references(() => airlines.airlineId, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at').defaultNow(),
 });

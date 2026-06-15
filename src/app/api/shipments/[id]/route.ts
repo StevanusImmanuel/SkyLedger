@@ -9,6 +9,7 @@ import {
 } from '@/lib/shipments/shipping-fee';
 import { eq, and, sql, ne, inArray } from 'drizzle-orm';
 import { logActivity } from '@/lib/activity-logger';
+import { canTransition, isReportingLocked, type ShipmentStatus } from '@/lib/shipments/status-flow';
 
 async function getAuthUser(req: NextRequest) {
   const token = req.cookies.get('terminal_session')?.value;
@@ -131,15 +132,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         notes: true,
         updatedAt: true,
         status: true,
+        deliveryStatus: true,
       },
     });
 
     if (!existingShipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
 
-    // Guard: closed shipments are read-only
-    if (existingShipment.status === 'closed') {
+    // Guard: reporting-eligible shipments (closed/cancelled/delivered and delivered-equivalent
+    // delivery statuses) are permanently read-only — no edit, no delete, no status change.
+    if (isReportingLocked(existingShipment.status, existingShipment.deliveryStatus)) {
       return NextResponse.json(
-        { error: 'Shipment is closed and cannot be modified' },
+        { error: 'This shipment has been finalized and can no longer be modified.' },
         { status: 403 }
       );
     }
@@ -192,10 +195,22 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         'Ready for Pickup': { shipmentStatus: 'processing', deliveryStatusEnum: 'ready_for_pickup' },
         'Delivered': { shipmentStatus: 'delivered', deliveryStatusEnum: 'delivered' },
         'Closed': { shipmentStatus: 'closed', deliveryStatusEnum: 'delivered' },
+        'Canceled': { shipmentStatus: 'cancelled', deliveryStatusEnum: 'booked' },
+        'Cancelled': { shipmentStatus: 'cancelled', deliveryStatusEnum: 'booked' },
       };
 
       const mapped = statusMap[deliveryStatus];
       if (mapped) {
+        // Enforce allowed status-flow transitions
+        const from = existingShipment.status as ShipmentStatus;
+        const to = mapped.shipmentStatus as ShipmentStatus;
+        if (!canTransition(from, to)) {
+          return NextResponse.json(
+            { error: `Invalid status transition: cannot move from "${from}" to "${to}".` },
+            { status: 400 }
+          );
+        }
+
         updateData.status = mapped.shipmentStatus;
         updateData.deliveryStatus = mapped.deliveryStatusEnum;
 
@@ -417,16 +432,16 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     // Get shipment info before deleting
     const shipment = await db.query.shipments.findFirst({
       where: eq(shipments.id, id),
-      columns: { awbNumber: true, status: true },
+      columns: { awbNumber: true, status: true, deliveryStatus: true },
     });
 
     if (!shipment) {
       return NextResponse.json({ error: 'Shipment not found or already deleted' }, { status: 404 });
     }
 
-    // Guard: closed shipments cannot be deleted
-    if (shipment.status === 'closed') {
-      return NextResponse.json({ error: 'Shipment is closed and cannot be deleted' }, { status: 403 });
+    // Guard: reporting-eligible shipments cannot be deleted
+    if (isReportingLocked(shipment.status, shipment.deliveryStatus)) {
+      return NextResponse.json({ error: 'This shipment has been finalized and can no longer be deleted.' }, { status: 403 });
     }
 
     // Hard delete - cascade will delete related shipment_events

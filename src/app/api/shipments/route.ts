@@ -234,6 +234,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid airline selection' }, { status: 400 });
     }
 
+    // Validate aircraft exists and is active (before any flight is created)
+    const airplane = await db.query.airplanes.findFirst({
+      where: eq(airplanes.airplaneId, airplaneId),
+    });
+
+    if (!airplane) {
+      return NextResponse.json({ error: 'Selected aircraft does not exist' }, { status: 400 });
+    }
+
+    if (!airplane.isActive) {
+      return NextResponse.json({ error: `Aircraft ${airplane.flightNumber} is not active and cannot be assigned` }, { status: 400 });
+    }
+
     // Get airports
     const [originAirport, destAirport] = await Promise.all([
       db.query.airports.findFirst({ where: eq(airports.iataCode, originIata) }),
@@ -292,10 +305,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Capacity validation
-    const airplane = await db.query.airplanes.findFirst({
-      where: eq(airplanes.airplaneId, airplaneId),
-    });
-
     if (airplane?.maxWeightKg) {
       const maxWeight = Number(airplane.maxWeightKg);
       const [{ value: currentLoad }] = await db
@@ -340,7 +349,8 @@ export async function POST(request: NextRequest) {
           .where(
             and(
               eq(airplanes.airlineId, airlineId),
-              ne(airplanes.airplaneId, airplaneId)
+              ne(airplanes.airplaneId, airplaneId),
+              eq(airplanes.isActive, true)
             )
           );
 
@@ -410,6 +420,28 @@ export async function POST(request: NextRequest) {
     if (deliveryStatus && deliveryStatusMap[deliveryStatus]) {
       shipmentStatus = deliveryStatusMap[deliveryStatus].shipmentStatus;
       deliveryStatusEnum = deliveryStatusMap[deliveryStatus].deliveryStatusEnum;
+    }
+
+    // Final capacity re-check immediately before insert. The neon-http driver does not support
+    // interactive transactions, so this narrows (does not eliminate) the race window where a
+    // concurrent shipment could have consumed capacity since the validation above.
+    if (airplane?.maxWeightKg && availableFlight) {
+      const maxWeight = Number(airplane.maxWeightKg);
+      const [{ value: latestLoad }] = await db
+        .select({ value: sql<string>`COALESCE(SUM(CAST(${shipments.weightKg} AS NUMERIC)), 0)` })
+        .from(shipments)
+        .where(
+          and(
+            eq(shipments.flightId, availableFlight.id),
+            inArray(shipments.status, ['pending', 'processing', 'in_transit'])
+          )
+        );
+
+      if ((Number(latestLoad) + productWeightValue) > maxWeight) {
+        return NextResponse.json({
+          error: `Aircraft capacity changed during processing. Available capacity is no longer sufficient for this shipment. Please retry.`,
+        }, { status: 409 });
+      }
     }
 
     const [newShipment] = await db

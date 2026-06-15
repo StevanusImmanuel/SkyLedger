@@ -262,3 +262,38 @@ export function ShipmentFormSkeleton() {
     </div>
   );
 }
+
+export function UserTableSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className="sl-awb-table-container">
+      <table className="sl-table">
+        <thead>
+          <tr>
+            <th style={{ paddingLeft: 20 }}>SkyLedger ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Department</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: rows }).map((_, i) => (
+            <tr key={i}>
+              <td style={{ paddingLeft: 20 }}><div className="skeleton" style={{ width: 90, height: 14, borderRadius: 4 }} /></td>
+              <td><div className="skeleton" style={{ width: 120, height: 14, borderRadius: 4 }} /></td>
+              <td><div className="skeleton" style={{ width: 160, height: 14, borderRadius: 4 }} /></td>
+              <td><div className="skeleton" style={{ width: 70, height: 20, borderRadius: 12 }} /></td>
+              <td><div className="skeleton" style={{ width: 90, height: 14, borderRadius: 4 }} /></td>
+              <td><div className="skeleton" style={{ width: 60, height: 20, borderRadius: 12 }} /></td>
+              <td><div className="skeleton" style={{ width: 100, height: 12, borderRadius: 4 }} /></td>
+              <td><div className="skeleton" style={{ width: 28, height: 28, borderRadius: 6 }} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

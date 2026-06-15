@@ -37,6 +37,7 @@ type Airplane = {
   maxWeightKg: string | null;
   maxVolumeM3: string | null;
   airlineCode: string;
+  isActive?: boolean;
   utilizedWeight?: number;
 };
 
@@ -81,7 +82,6 @@ const DELIVERY_STATUSES = [
   "Out for Delivery",
   "Ready for Pickup",
   "Delivered",
-  "Closed",
 ];
 
 export default function NewShipmentPage() {
@@ -462,7 +462,7 @@ export default function NewShipmentPage() {
                   
                 >
                   <option value="">Select Airplane</option>
-                  {airplanes.map((airplane) => (
+                  {airplanes.filter(a => a.isActive !== false).map((airplane) => (
                     <option key={airplane.airplaneId} value={airplane.airplaneId}>
                       {airplane.flightNumber} - {airplane.model}{airplane.maxWeightKg ? ` (max ${airplane.maxWeightKg}kg)` : ''}
                     </option>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { airplanes, airlines, flights, shipments } from '@/lib/db/schema';
-import { eq, and, ne, inArray, sql } from 'drizzle-orm';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 import { getSessionUser } from '@/lib/auth/session';
 import { logActivity } from '@/lib/activity-logger';
 
@@ -121,7 +121,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const body = await request.json();
-    const { flightNumber, model, capacity, maxWeightKg, maxVolumeM3, airlineId } = body;
+    const { airlineId } = body;
 
     const existingAirplane = await db.query.airplanes.findFirst({
       where: eq(airplanes.airplaneId, airplaneId),
@@ -131,81 +131,20 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Airplane not found' }, { status: 404 });
     }
 
-    // Validate fields if provided
-    const updateData: Record<string, any> = {};
-
-    if (flightNumber !== undefined) {
-      if (!flightNumber.trim()) {
-        return NextResponse.json({ error: 'Flight identifier cannot be empty' }, { status: 400 });
-      }
-      // Check duplicate
-      const duplicate = await db.query.airplanes.findFirst({
-        where: and(
-          eq(airplanes.flightNumber, flightNumber.trim()),
-          ne(airplanes.airplaneId, airplaneId)
-        ),
-      });
-      if (duplicate) {
-        return NextResponse.json({ error: `Flight identifier '${flightNumber}' already exists` }, { status: 409 });
-      }
-      updateData.flightNumber = flightNumber.trim();
+    // Only the airline may be changed after creation. All other specifications
+    // (flight number, model, capacity, cargo weight/volume) are immutable.
+    if (airlineId === undefined || airlineId === null || airlineId === '') {
+      return NextResponse.json({ error: 'Please select an airline' }, { status: 400 });
     }
 
-    if (model !== undefined) {
-      if (!model.trim()) {
-        return NextResponse.json({ error: 'Model name cannot be empty' }, { status: 400 });
-      }
-      updateData.model = model.trim();
+    const airline = await db.query.airlines.findFirst({
+      where: eq(airlines.airlineId, Number(airlineId)),
+    });
+    if (!airline) {
+      return NextResponse.json({ error: 'Selected airline does not exist' }, { status: 400 });
     }
 
-    if (capacity !== undefined) {
-      const capacityValue = Number(capacity);
-      if (isNaN(capacityValue) || capacityValue <= 0) {
-        return NextResponse.json({ error: 'General capacity must be a positive integer' }, { status: 400 });
-      }
-      updateData.capacity = capacityValue;
-    }
-
-    if (maxVolumeM3 !== undefined) {
-      const maxVolumeValue = maxVolumeM3 ? Number(maxVolumeM3) : null;
-      if (maxVolumeValue !== null && (isNaN(maxVolumeValue) || maxVolumeValue <= 0)) {
-        return NextResponse.json({ error: 'Cargo volume capacity must be a positive number' }, { status: 400 });
-      }
-      updateData.maxVolumeM3 = maxVolumeValue ? String(maxVolumeValue) : null;
-    }
-
-    if (airlineId !== undefined) {
-      updateData.airlineId = Number(airlineId);
-    }
-
-    if (maxWeightKg !== undefined) {
-      const maxWeightValue = Number(maxWeightKg);
-      if (isNaN(maxWeightValue) || maxWeightValue <= 0) {
-        return NextResponse.json({ error: 'Cargo weight capacity must be a positive number' }, { status: 400 });
-      }
-
-      // Calculate current assigned shipment weight
-      const [{ value: currentLoad }] = await db
-        .select({ value: sql<number>`COALESCE(SUM(CAST(${shipments.weightKg} AS NUMERIC)), 0)` })
-        .from(shipments)
-        .innerJoin(flights, eq(shipments.flightId, flights.id))
-        .where(
-          and(
-            eq(flights.airplaneId, airplaneId),
-            inArray(flights.status, ['scheduled', 'departed']),
-            inArray(shipments.status, ['pending', 'processing', 'in_transit'])
-          )
-        );
-
-      const existingWeight = Number(currentLoad);
-      if (maxWeightValue < existingWeight) {
-        return NextResponse.json({
-          error: `Capacity cannot be reduced below the existing assigned cargo load. Current load: ${existingWeight.toFixed(1)}kg, requested capacity: ${maxWeightValue}kg`
-        }, { status: 400 });
-      }
-
-      updateData.maxWeightKg = String(maxWeightValue);
-    }
+    const updateData: Record<string, any> = { airlineId: Number(airlineId) };
 
     const [updated] = await db
       .update(airplanes)
