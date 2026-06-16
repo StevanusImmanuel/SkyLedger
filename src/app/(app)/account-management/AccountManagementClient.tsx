@@ -9,6 +9,7 @@ import { PageTitle } from '@/components/ui/page-title';
 import { FormError } from '@/components/ui/form-error';
 import { StatCardSkeleton, UserTableSkeleton } from '@/components/ui/skeletons';
 import { apiFetch } from '@/lib/api-client';
+import { TableEmptyState } from '@/components/ui/table-empty-state';
 
 type UserRole = 'admin' | 'operator' | 'viewer';
 
@@ -63,6 +64,7 @@ export default function AccountManagementClient() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
@@ -308,6 +310,16 @@ export default function AccountManagementClient() {
     }
   }
 
+  const filteredUsers = users.filter((u) => {
+    const q = search.toLowerCase();
+    return (
+      u.name.toLowerCase().includes(q) ||
+      u.email.toLowerCase().includes(q) ||
+      u.skyledgerId.toLowerCase().includes(q) ||
+      (u.department || '').toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div>
       <PageTitle title="Account Management" />
@@ -377,6 +389,21 @@ export default function AccountManagementClient() {
         )}
       </div>
 
+      {/* Search Bar */}
+      <div className="sl-shipment-nav" style={{ marginBottom: 16 }}>
+        <div className="sl-awb-search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search Name, Email, Department..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
       {isLoading ? (
         <UserTableSkeleton rows={6} />
       ) : (
@@ -400,8 +427,11 @@ export default function AccountManagementClient() {
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => (
-                <tr key={user.id}>
+              {filteredUsers.length === 0 ? (
+                <TableEmptyState colSpan={8} />
+              ) : (
+                filteredUsers.map((user) => (
+                  <tr key={user.id}>
                   <td style={{ paddingLeft: 20 }}>
                     <span style={{ fontSize: 12, fontWeight: 800, color: '#1a2d5a' }}>
                       {user.skyledgerId}
@@ -462,7 +492,8 @@ export default function AccountManagementClient() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              ))
+              )}
             </tbody>
           </table>
         )}

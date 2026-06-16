@@ -7,6 +7,8 @@ import { Pagination } from '@/components/ui/Pagination';
 import { TableSkeleton, StatCardSkeleton } from '@/components/ui/skeletons';
 import { exportToCSV, exportToPDF } from '@/lib/utils/export';
 import { PageTitle } from '@/components/ui/page-title';
+import { TableEmptyState } from '@/components/ui/table-empty-state';
+
 
 type Shipment = {
   id: string;
@@ -363,11 +365,7 @@ function ReportsContent() {
             </thead>
             <tbody>
               {paginatedShipments.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ padding: '28px 20px', textAlign: 'center', color: '#64748b', fontSize: 13, fontWeight: 600 }}>
-                    No reportable shipments found.
-                  </td>
-                </tr>
+                <TableEmptyState colSpan={7} />
               ) : paginatedShipments.map((s) => {
                 const statusKey = s.status === 'closed' ? 'closed' : (s.deliveryStatus || s.status);
                 const statusClass = statusClassMap[statusKey] || 'sl-badge-manifested';

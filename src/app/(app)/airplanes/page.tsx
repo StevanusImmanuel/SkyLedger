@@ -13,6 +13,7 @@ import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { PageTitle } from '@/components/ui/page-title';
 import { apiFetch } from '@/lib/api-client';
 import { FormError } from '@/components/ui/form-error';
+import { TableEmptyState } from '@/components/ui/table-empty-state';
 
 type Airplane = {
   airplaneId: number;
@@ -454,11 +455,7 @@ function FleetContent() {
             </thead>
             <tbody>
               {paginatedAirplanes.length === 0 ? (
-                <tr>
-                  <td colSpan={9} style={{ padding: '28px 20px', textAlign: 'center', color: '#64748b', fontSize: 13, fontWeight: 600 }}>
-                    No aircraft found in fleet.
-                  </td>
-                </tr>
+                <TableEmptyState colSpan={9} />
               ) : (
                 paginatedAirplanes.map((plane) => {
                   const maxWeight = Number(plane.maxWeightKg || 0);
