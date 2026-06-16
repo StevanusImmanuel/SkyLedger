@@ -2690,6 +2690,10 @@
   gap: 16px;
 }
 
+.sl-settings-workspace-grid.sl-two-cols {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .sl-settings-mini-card {
   min-width: 0;
   background: #fff;
@@ -3289,7 +3293,8 @@
 @media (max-width: 900px) {
   .sl-settings-grid,
   .sl-faq-grid,
-  .sl-settings-workspace-grid {
+  .sl-settings-workspace-grid,
+  .sl-settings-workspace-grid.sl-two-cols {
     grid-template-columns: 1fr;
   }
 }

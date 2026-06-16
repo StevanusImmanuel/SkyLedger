@@ -218,7 +218,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         updateData.status = mapped.shipmentStatus;
         updateData.deliveryStatus = mapped.deliveryStatusEnum;
 
-        if (deliveryStatus === 'Delivered') {
+        if (mapped.shipmentStatus === 'delivered' || mapped.shipmentStatus === 'closed' || mapped.shipmentStatus === 'cancelled') {
           updateData.actualDelivery = new Date();
         }
       }

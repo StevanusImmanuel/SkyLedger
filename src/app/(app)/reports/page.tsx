@@ -20,6 +20,7 @@ type Shipment = {
   weightKg: string;
   productType: string | null;
   createdAt: string;
+  actualDelivery?: string | null;
   notes: string | null;
 };
 
@@ -69,8 +70,6 @@ const airportColorMap: Record<string, string> = {
   HKG: 'blue', LAX: 'purple',
 };
 
-// Shipments statuses that count as delivered for the reports page:
-const DELIVERED_STATUSES = ['delivered', 'arrived_at_destination', 'out_for_delivery', 'ready_for_pickup', 'closed'];
 
 function ReportsContent() {
   const [search, setSearch] = useState('');
@@ -81,7 +80,7 @@ function ReportsContent() {
   const [selectedAirport, setSelectedAirport] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('all_delivered');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all_final');
   const [stats, setStats] = useState({
     total: 0,
     inFlight: 0,
@@ -107,47 +106,56 @@ function ReportsContent() {
     fetchAirports();
   }, []);
 
-  // Fetch shipments with filters
+  // Fetch shipments and statistics with filters
   useEffect(() => {
-    async function fetchShipments() {
+    async function fetchData() {
       setIsLoading(true);
       try {
+        // 1. Fetch shipments matching criteria
         const params = new URLSearchParams();
         if (debouncedSearch) params.set('search', debouncedSearch);
         if (selectedAirport !== 'all') params.set('airport', selectedAirport);
-        if (selectedStatus === 'closed') {
-          params.set('status', 'closed');
+        
+        if (selectedStatus === 'all_final') {
+          params.set('status', 'delivered,closed,cancelled');
         } else {
-          params.set('deliveryStatus', selectedStatus);
+          params.set('status', selectedStatus);
         }
+        
         if (dateFrom) params.set('dateFrom', dateFrom);
         if (dateTo) params.set('dateTo', dateTo);
         params.set('limit', '1000'); // Get all for reports
 
-        const res = await fetch(`/api/shipments?${params}`);
-        const json = await res.json();
-        if (json.success) {
-          setShipments(json.data);
+        const shipmentsRes = await fetch(`/api/shipments?${params}`);
+        const shipmentsJson = await shipmentsRes.json();
+        if (shipmentsJson.success) {
+          setShipments(shipmentsJson.data);
+        }
 
-          // Calculate stats
-          const total = json.data.length;
-          const inFlight = 0;
-          const arrived = json.data.filter((s: Shipment) => 
-            DELIVERED_STATUSES.includes(s.deliveryStatus || '') || s.status === 'closed'
-          ).length;
+        // 2. Fetch synchronized summary statistics from reports API
+        const statsParams = new URLSearchParams();
+        if (debouncedSearch) statsParams.set('search', debouncedSearch);
+        if (selectedAirport !== 'all') statsParams.set('airport', selectedAirport);
+        if (dateFrom) statsParams.set('dateFrom', dateFrom);
+        if (dateTo) statsParams.set('dateTo', dateTo);
 
-          const totalWeight = json.data.reduce((sum: number, s: Shipment) => sum + Number(s.weightKg), 0);
-
-          setStats({ total, inFlight, arrived, totalWeight });
+        const statsRes = await fetch(`/api/reports?${statsParams}`);
+        const statsJson = await statsRes.json();
+        if (statsJson.success) {
+          setStats({
+            total: statsJson.data.summary.total,
+            inFlight: statsJson.data.summary.inFlight,
+            arrived: statsJson.data.summary.arrived,
+            totalWeight: Number(statsJson.data.summary.totalWeightKg),
+          });
         }
       } catch (err) {
-        console.error('Failed to fetch shipments:', err);
-      } // isLoading managed in finally
-      finally {
+        console.error('Failed to fetch reports data:', err);
+      } finally {
         setIsLoading(false);
       }
     }
-    fetchShipments();
+    fetchData();
   }, [debouncedSearch, selectedAirport, dateFrom, dateTo, selectedStatus]);
 
   const paginatedShipments = getPaginatedData(shipments);
@@ -286,12 +294,10 @@ function ReportsContent() {
             onChange={(e) => setSelectedStatus(e.target.value)}
             aria-label="Report delivery status filter"
           >
-            <option value="all_delivered">All Delivered Statuses</option>
-            <option value="delivered">Delivered</option>
-            <option value="arrived_at_destination">Arrived at Destination</option>
-            <option value="out_for_delivery">Out for Delivery</option>
-            <option value="ready_for_pickup">Ready for Pickup</option>
+            <option value="all_final">All Reports</option>
+            <option value="delivered">Completed</option>
             <option value="closed">Closed</option>
+            <option value="cancelled">Cancelled</option>
           </select>
         </div>
         <div className="sl-report-export-btns">
@@ -306,7 +312,7 @@ function ReportsContent() {
                 ProductType: s.productType || 'N/A',
                 DeliveryStatus: s.deliveryStatus?.toUpperCase() || 'N/A',
                 Weight: `${s.weightKg} kg`,
-                CreatedAt: new Date(s.createdAt).toLocaleString(),
+                Timestamp: new Date(s.actualDelivery || s.createdAt).toLocaleString(),
               }));
               exportToCSV(exportData, 'reports');
             }}
@@ -325,7 +331,7 @@ function ReportsContent() {
                 ProductType: s.productType || 'N/A',
                 DeliveryStatus: s.deliveryStatus?.toUpperCase() || 'N/A',
                 Weight: `${s.weightKg} kg`,
-                CreatedAt: new Date(s.createdAt).toLocaleString(),
+                Timestamp: new Date(s.actualDelivery || s.createdAt).toLocaleString(),
               }));
               exportToPDF(exportData, 'reports', 'Reports - Shipments');
             }}
@@ -359,7 +365,7 @@ function ReportsContent() {
               {paginatedShipments.length === 0 ? (
                 <tr>
                   <td colSpan={7} style={{ padding: '28px 20px', textAlign: 'center', color: '#64748b', fontSize: 13, fontWeight: 600 }}>
-                    No delivered shipments found.
+                    No reportable shipments found.
                   </td>
                 </tr>
               ) : paginatedShipments.map((s) => {
@@ -370,6 +376,7 @@ function ReportsContent() {
                 const destColor = airportColorMap[s.destAirport?.iataCode || ''] || 'blue';
 
                 const displayStatus = s.status === 'closed' ? 'Closed'
+                  : s.status === 'cancelled' ? 'Canceled'
                   : s.deliveryStatus
                   ? s.deliveryStatus.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
                   : s.status.replace('_', '-').toUpperCase();
@@ -399,7 +406,7 @@ function ReportsContent() {
                     <td><span style={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>{s.flight?.airplane?.flightNumber || 'N/A'}</span></td>
                     <td><span className={`sl-status-badge ${statusClass}`}>{displayStatus}</span></td>
                     <td><span style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>{Number(s.weightKg).toFixed(0)} kg</span></td>
-                    <td><span style={{ fontSize: 11.5, color: '#64748b' }}>{new Date(s.createdAt).toLocaleString()}</span></td>
+                    <td><span style={{ fontSize: 11.5, color: '#64748b' }}>{new Date(s.actualDelivery || s.createdAt).toLocaleString()}</span></td>
                   </tr>
                 );
               })}
