@@ -205,29 +205,43 @@ function FleetContent() {
   const validateForm = () => {
     const errors: Record<string, string> = {};
 
-    // Airline is always required (it's the only editable field when editing).
-    if (!formData.airlineId) errors.airlineId = 'Please select an airline';
+    if (!formData.airlineId) {
+      errors.airlineId = 'Please select an airline';
+    }
 
-    // When editing, every field except the airline is read-only, so skip their validation.
-    if (!isEditing) {
-      if (!formData.model.trim()) errors.model = 'Model is required';
-
-      const capacityVal = Number(formData.capacity);
-      if (!formData.capacity || !Number.isInteger(capacityVal) || capacityVal <= 0) {
-        errors.capacity = 'Capacity must be a positive integer';
+    if (isEditing) {
+      if (!formData.flightNumber?.trim()) {
+        errors.flightNumber = 'Flight number is required';
+      } else if (formData.flightNumber.length > 20) {
+        errors.flightNumber = 'Flight number must not exceed 20 characters';
       }
+    }
 
-      const weightVal = Number(formData.maxWeightKg);
-      if (!formData.maxWeightKg || isNaN(weightVal) || weightVal <= 0) {
-        errors.maxWeightKg = 'Max weight capacity must be a positive number';
-      }
+    if (!formData.model?.trim()) {
+      errors.model = 'Model is required';
+    } else if (formData.model.length > 100) {
+      errors.model = 'Model name must not exceed 100 characters';
+    }
 
-      if (formData.maxVolumeM3) {
-        const volVal = Number(formData.maxVolumeM3);
-        if (isNaN(volVal) || volVal <= 0) {
-          errors.maxVolumeM3 = 'Max volume must be a positive number';
-        }
-      }
+    const capacityVal = Number(formData.capacity);
+    if (!formData.capacity || !Number.isInteger(capacityVal) || capacityVal <= 0) {
+      errors.capacity = 'Capacity must be a positive integer';
+    } else if (capacityVal > 10000) {
+      errors.capacity = 'Capacity must not exceed 10,000 passengers';
+    }
+
+    const weightVal = Number(formData.maxWeightKg);
+    if (!formData.maxWeightKg || isNaN(weightVal) || weightVal <= 0) {
+      errors.maxWeightKg = 'Max weight capacity must be a positive number';
+    } else if (weightVal > 99999999.99) {
+      errors.maxWeightKg = 'Max weight capacity must not exceed 99,999,999.99 kg';
+    }
+
+    const volVal = Number(formData.maxVolumeM3);
+    if (!formData.maxVolumeM3 || isNaN(volVal) || volVal <= 0) {
+      errors.maxVolumeM3 = 'Max volume must be a positive number';
+    } else if (volVal > 99999999.99) {
+      errors.maxVolumeM3 = 'Max volume must not exceed 99,999,999.99 m³';
     }
 
     setFormErrors(errors);
@@ -256,14 +270,31 @@ function FleetContent() {
         addNotification({
           variant: 'success',
           title: isEditing ? 'Aircraft updated!' : 'Aircraft added!',
-          description: `Airplane identifier: ${formData.flightNumber}`,
+          description: `Airplane identifier: ${formData.flightNumber || data.data.flightNumber}`,
         });
         setRefreshTrigger(prev => prev + 1);
       } else {
+        const servErr = data.error || 'An error occurred.';
+        const newFormErrors: Record<string, string> = {};
+        if (servErr.toLowerCase().includes('airline')) {
+          newFormErrors.airlineId = servErr;
+        } else if (servErr.toLowerCase().includes('model')) {
+          newFormErrors.model = servErr;
+        } else if (servErr.toLowerCase().includes('capacity') || servErr.toLowerCase().includes('passenger')) {
+          newFormErrors.capacity = servErr;
+        } else if (servErr.toLowerCase().includes('weight') || servErr.toLowerCase().includes('cargo weight')) {
+          newFormErrors.maxWeightKg = servErr;
+        } else if (servErr.toLowerCase().includes('volume') || servErr.toLowerCase().includes('cargo volume')) {
+          newFormErrors.maxVolumeM3 = servErr;
+        } else if (servErr.toLowerCase().includes('flight number') || servErr.toLowerCase().includes('identifier')) {
+          newFormErrors.flightNumber = servErr;
+        }
+        setFormErrors(newFormErrors);
+
         addNotification({
           variant: 'destructive',
           title: 'Operation failed',
-          description: data.error || 'An error occurred.',
+          description: servErr,
         });
       }
     } catch (err: any) {
@@ -661,36 +692,31 @@ function FleetContent() {
 
             <form onSubmit={handleFormSubmit} style={{ padding: 22 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {isEditing && (
-                  <div style={{ background: '#f0f4ff', border: '1px solid #c7d2fe', borderRadius: 8, padding: '10px 12px', fontSize: 12, fontWeight: 600, color: '#1a2d5a' }}>
-                    Only the airline can be changed. All other aircraft specifications are read-only.
-                  </div>
-                )}
                 <div>
-                  <label className="sl-field-label">Flight Number / Identifier</label>
+                  <label className="sl-field-label">Flight Number / Identifier *</label>
                   <input
                     type="text"
                     className="sl-field-input"
                     placeholder="Auto-generated from airline code"
                     value={formData.flightNumber}
-                    readOnly
-                    style={{ background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' }}
+                    onChange={(e) => setFormData({ ...formData, flightNumber: e.target.value })}
+                    readOnly={!isEditing}
+                    style={!isEditing ? { background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' } : undefined}
                   />
                   <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginTop: 4 }}>
-                    {isEditing ? 'Flight number cannot be changed.' : 'Generated automatically from the selected airline code on save.'}
+                    {isEditing ? 'Must be unique. Suffix numbering is sequential.' : 'Generated automatically from the selected airline code on save.'}
                   </p>
+                  <FormError message={formErrors.flightNumber || ''} />
                 </div>
 
                 <div>
-                  <label className="sl-field-label">Model{isEditing ? '' : ' *'}</label>
+                  <label className="sl-field-label">Model *</label>
                   <input
                     type="text"
                     className="sl-field-input"
                     placeholder="e.g. Boeing 737-800F, Airbus A330"
                     value={formData.model}
                     onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                    readOnly={isEditing}
-                    style={isEditing ? { background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' } : undefined}
                   />
                   <FormError message={formErrors.model || ''} />
                 </div>
@@ -715,14 +741,12 @@ function FleetContent() {
                   </div>
 
                   <div>
-                    <label className="sl-field-label">Capacity (Passengers){isEditing ? '' : ' *'}</label>
+                    <label className="sl-field-label">Capacity (Passengers) *</label>
                     <input
                       type="number"
                       className="sl-field-input"
                       value={formData.capacity}
                       onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                      readOnly={isEditing}
-                      style={isEditing ? { background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' } : undefined}
                     />
                     <FormError message={formErrors.capacity || ''} />
                   </div>
@@ -730,34 +754,53 @@ function FleetContent() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <div>
-                    <label className="sl-field-label">Cargo Max Weight (kg){isEditing ? '' : ' *'}</label>
+                    <label className="sl-field-label">Cargo Max Weight (kg) *</label>
                     <input
                       type="number"
                       className="sl-field-input"
                       placeholder="e.g. 15000"
                       value={formData.maxWeightKg}
                       onChange={(e) => setFormData({ ...formData, maxWeightKg: e.target.value })}
-                      readOnly={isEditing}
-                      style={isEditing ? { background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' } : undefined}
                     />
                     <FormError message={formErrors.maxWeightKg || ''} />
                   </div>
 
                   <div>
-                    <label className="sl-field-label">Cargo Max Volume (m³{isEditing ? '' : ' - Optional'})</label>
+                    <label className="sl-field-label">Cargo Max Volume (m³) *</label>
                     <input
                       type="number"
                       className="sl-field-input"
                       placeholder="e.g. 120"
                       value={formData.maxVolumeM3}
                       onChange={(e) => setFormData({ ...formData, maxVolumeM3: e.target.value })}
-                      readOnly={isEditing}
-                      style={isEditing ? { background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' } : undefined}
                     />
                     <FormError message={formErrors.maxVolumeM3 || ''} />
                   </div>
                 </div>
               </div>
+
+              {Object.keys(formErrors).length > 0 && (
+                <div style={{
+                  marginTop: 16,
+                  padding: '10px 14px',
+                  background: '#fef2f2',
+                  border: '1px solid #fee2e2',
+                  borderRadius: 8,
+                  color: '#ef4444',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  <span>All fields marked with an asterisk (*) must be filled correctly.</span>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24, borderTop: '1px solid #f0f4f8', paddingTop: 18 }}>

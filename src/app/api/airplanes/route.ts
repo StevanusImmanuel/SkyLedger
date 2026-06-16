@@ -102,25 +102,40 @@ export async function POST(request: NextRequest) {
     if (!model?.trim()) {
       return NextResponse.json({ error: 'Model is required' }, { status: 400 });
     }
+    if (model.length > 100) {
+      return NextResponse.json({ error: 'Model name must not exceed 100 characters' }, { status: 400 });
+    }
     if (capacity === undefined || capacity === null || capacity === '') {
       return NextResponse.json({ error: 'Passenger capacity is required' }, { status: 400 });
     }
     if (maxWeightKg === undefined || maxWeightKg === null || maxWeightKg === '') {
       return NextResponse.json({ error: 'Cargo weight capacity is required' }, { status: 400 });
     }
+    if (maxVolumeM3 === undefined || maxVolumeM3 === null || maxVolumeM3 === '') {
+      return NextResponse.json({ error: 'Cargo volume capacity is required' }, { status: 400 });
+    }
 
     const capacityValue = Number(capacity);
     const maxWeightValue = Number(maxWeightKg);
-    const maxVolumeValue = maxVolumeM3 !== undefined && maxVolumeM3 !== null && maxVolumeM3 !== '' ? Number(maxVolumeM3) : null;
+    const maxVolumeValue = Number(maxVolumeM3);
 
     if (!Number.isInteger(capacityValue) || capacityValue <= 0) {
-      return NextResponse.json({ error: 'Passenger/General capacity must be a positive integer' }, { status: 400 });
+      return NextResponse.json({ error: 'Passenger capacity must be a positive integer' }, { status: 400 });
+    }
+    if (capacityValue > 10000) {
+      return NextResponse.json({ error: 'Passenger capacity must not exceed 10,000' }, { status: 400 });
     }
     if (isNaN(maxWeightValue) || maxWeightValue <= 0) {
       return NextResponse.json({ error: 'Cargo weight capacity must be a positive number' }, { status: 400 });
     }
-    if (maxVolumeValue !== null && (isNaN(maxVolumeValue) || maxVolumeValue <= 0)) {
+    if (maxWeightValue > 99999999.99) {
+      return NextResponse.json({ error: 'Cargo weight capacity must not exceed 99,999,999.99 kg' }, { status: 400 });
+    }
+    if (isNaN(maxVolumeValue) || maxVolumeValue <= 0) {
       return NextResponse.json({ error: 'Cargo volume capacity must be a positive number' }, { status: 400 });
+    }
+    if (maxVolumeValue > 99999999.99) {
+      return NextResponse.json({ error: 'Cargo volume capacity must not exceed 99,999,999.99 m³' }, { status: 400 });
     }
 
     // Auto-generate a unique flight number from the airline code: e.g. "BA-1391".

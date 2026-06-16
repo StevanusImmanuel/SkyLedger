@@ -150,27 +150,43 @@ export default function AirplaneDetailPage() {
   // Validate edit form
   const validateForm = () => {
     const errors: Record<string, string> = {};
-    if (!formData.flightNumber.trim()) errors.flightNumber = 'Flight identifier is required';
-    if (!formData.model.trim()) errors.model = 'Model is required';
-    
+
+    if (!formData.airlineId) {
+      errors.airlineId = 'Please select an airline';
+    }
+
+    if (!formData.flightNumber?.trim()) {
+      errors.flightNumber = 'Flight number is required';
+    } else if (formData.flightNumber.length > 20) {
+      errors.flightNumber = 'Flight number must not exceed 20 characters';
+    }
+
+    if (!formData.model?.trim()) {
+      errors.model = 'Model is required';
+    } else if (formData.model.length > 100) {
+      errors.model = 'Model name must not exceed 100 characters';
+    }
+
     const capacityVal = Number(formData.capacity);
-    if (!formData.capacity || isNaN(capacityVal) || capacityVal <= 0) {
+    if (!formData.capacity || !Number.isInteger(capacityVal) || capacityVal <= 0) {
       errors.capacity = 'Capacity must be a positive integer';
+    } else if (capacityVal > 10000) {
+      errors.capacity = 'Capacity must not exceed 10,000 passengers';
     }
 
     const weightVal = Number(formData.maxWeightKg);
     if (!formData.maxWeightKg || isNaN(weightVal) || weightVal <= 0) {
       errors.maxWeightKg = 'Max weight capacity must be a positive number';
+    } else if (weightVal > 99999999.99) {
+      errors.maxWeightKg = 'Max weight capacity must not exceed 99,999,999.99 kg';
     }
 
-    if (formData.maxVolumeM3) {
-      const volVal = Number(formData.maxVolumeM3);
-      if (isNaN(volVal) || volVal <= 0) {
-        errors.maxVolumeM3 = 'Max volume must be a positive number';
-      }
+    const volVal = Number(formData.maxVolumeM3);
+    if (!formData.maxVolumeM3 || isNaN(volVal) || volVal <= 0) {
+      errors.maxVolumeM3 = 'Max volume must be a positive number';
+    } else if (volVal > 99999999.99) {
+      errors.maxVolumeM3 = 'Max volume must not exceed 99,999,999.99 m³';
     }
-
-    if (!formData.airlineId) errors.airlineId = 'Please select an airline';
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -198,10 +214,27 @@ export default function AirplaneDetailPage() {
           description: `All changes have been successfully applied.`,
         });
       } else {
+        const servErr = data.error || 'An error occurred.';
+        const newFormErrors: Record<string, string> = {};
+        if (servErr.toLowerCase().includes('airline')) {
+          newFormErrors.airlineId = servErr;
+        } else if (servErr.toLowerCase().includes('model')) {
+          newFormErrors.model = servErr;
+        } else if (servErr.toLowerCase().includes('capacity') || servErr.toLowerCase().includes('passenger')) {
+          newFormErrors.capacity = servErr;
+        } else if (servErr.toLowerCase().includes('weight') || servErr.toLowerCase().includes('cargo weight')) {
+          newFormErrors.maxWeightKg = servErr;
+        } else if (servErr.toLowerCase().includes('volume') || servErr.toLowerCase().includes('cargo volume')) {
+          newFormErrors.maxVolumeM3 = servErr;
+        } else if (servErr.toLowerCase().includes('flight number') || servErr.toLowerCase().includes('identifier')) {
+          newFormErrors.flightNumber = servErr;
+        }
+        setFormErrors(newFormErrors);
+
         addNotification({
           variant: 'destructive',
           title: 'Update failed',
-          description: data.error || 'An error occurred.',
+          description: servErr,
         });
       }
     } catch (err: any) {
@@ -647,7 +680,7 @@ export default function AirplaneDetailPage() {
                   </div>
 
                   <div>
-                    <label className="sl-field-label">Cargo Max Volume (m³ - Optional)</label>
+                    <label className="sl-field-label">Cargo Max Volume (m³) *</label>
                     <input
                       type="number"
                       className="sl-field-input"
@@ -658,6 +691,29 @@ export default function AirplaneDetailPage() {
                   </div>
                 </div>
               </div>
+
+              {Object.keys(formErrors).length > 0 && (
+                <div style={{
+                  marginTop: 16,
+                  padding: '10px 14px',
+                  background: '#fef2f2',
+                  border: '1px solid #fee2e2',
+                  borderRadius: 8,
+                  color: '#ef4444',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  <span>All fields marked with an asterisk (*) must be filled correctly.</span>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24, borderTop: '1px solid #f0f4f8', paddingTop: 18 }}>
