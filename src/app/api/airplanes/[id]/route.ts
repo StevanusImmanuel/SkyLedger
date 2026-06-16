@@ -121,7 +121,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const body = await request.json();
-    const { airlineId } = body;
+    const { flightNumber, model, capacity, maxWeightKg, maxVolumeM3, airlineId } = body;
 
     const existingAirplane = await db.query.airplanes.findFirst({
       where: eq(airplanes.airplaneId, airplaneId),
@@ -131,12 +131,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Airplane not found' }, { status: 404 });
     }
 
-    // Only the airline may be changed after creation. All other specifications
-    // (flight number, model, capacity, cargo weight/volume) are immutable.
+    // Validate airlineId
     if (airlineId === undefined || airlineId === null || airlineId === '') {
       return NextResponse.json({ error: 'Please select an airline' }, { status: 400 });
     }
-
     const airline = await db.query.airlines.findFirst({
       where: eq(airlines.airlineId, Number(airlineId)),
     });
@@ -144,7 +142,96 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Selected airline does not exist' }, { status: 400 });
     }
 
-    const updateData: Record<string, any> = { airlineId: Number(airlineId) };
+    // Validate flightNumber
+    if (!flightNumber?.trim()) {
+      return NextResponse.json({ error: 'Flight number is required' }, { status: 400 });
+    }
+    if (flightNumber.length > 20) {
+      return NextResponse.json({ error: 'Flight number must not exceed 20 characters' }, { status: 400 });
+    }
+    if (flightNumber.trim() !== existingAirplane.flightNumber) {
+      const existingFlightNum = await db.query.airplanes.findFirst({
+        where: eq(airplanes.flightNumber, flightNumber.trim()),
+      });
+      if (existingFlightNum) {
+        return NextResponse.json({ error: 'Flight number is already in use by another aircraft' }, { status: 409 });
+      }
+    }
+
+    // Validate model
+    if (!model?.trim()) {
+      return NextResponse.json({ error: 'Model is required' }, { status: 400 });
+    }
+    if (model.length > 100) {
+      return NextResponse.json({ error: 'Model name must not exceed 100 characters' }, { status: 400 });
+    }
+
+    // Validate capacity
+    if (capacity === undefined || capacity === null || capacity === '') {
+      return NextResponse.json({ error: 'Passenger capacity is required' }, { status: 400 });
+    }
+    const capacityValue = Number(capacity);
+    if (!Number.isInteger(capacityValue) || capacityValue <= 0) {
+      return NextResponse.json({ error: 'Passenger capacity must be a positive integer' }, { status: 400 });
+    }
+    if (capacityValue > 10000) {
+      return NextResponse.json({ error: 'Passenger capacity must not exceed 10,000' }, { status: 400 });
+    }
+
+    // Validate maxWeightKg
+    if (maxWeightKg === undefined || maxWeightKg === null || maxWeightKg === '') {
+      return NextResponse.json({ error: 'Cargo weight capacity is required' }, { status: 400 });
+    }
+    const maxWeightValue = Number(maxWeightKg);
+    if (isNaN(maxWeightValue) || maxWeightValue <= 0) {
+      return NextResponse.json({ error: 'Cargo weight capacity must be a positive number' }, { status: 400 });
+    }
+    if (maxWeightValue > 99999999.99) {
+      return NextResponse.json({ error: 'Cargo weight capacity must not exceed 99,999,999.99 kg' }, { status: 400 });
+    }
+
+    // Check currently utilized weight
+    const [activeWeightResult] = await db
+      .select({
+        totalWeight: sql<number>`SUM(CAST(${shipments.weightKg} AS NUMERIC))`,
+      })
+      .from(shipments)
+      .innerJoin(flights, eq(shipments.flightId, flights.id))
+      .where(
+        and(
+          eq(flights.airplaneId, airplaneId),
+          inArray(flights.status, ['scheduled', 'departed']),
+          inArray(shipments.status, ['pending', 'processing', 'in_transit'])
+        )
+      );
+    const utilizedWeight = Number(activeWeightResult?.totalWeight || 0);
+
+    if (maxWeightValue < utilizedWeight) {
+      return NextResponse.json({
+        error: `Cargo weight capacity cannot be less than the currently utilized weight of ${utilizedWeight.toLocaleString()} kg`
+      }, { status: 400 });
+    }
+
+    // Validate maxVolumeM3
+    if (maxVolumeM3 === undefined || maxVolumeM3 === null || maxVolumeM3 === '') {
+      return NextResponse.json({ error: 'Cargo volume capacity is required' }, { status: 400 });
+    }
+    const maxVolumeValue = Number(maxVolumeM3);
+    if (isNaN(maxVolumeValue) || maxVolumeValue <= 0) {
+      return NextResponse.json({ error: 'Cargo volume capacity must be a positive number' }, { status: 400 });
+    }
+    if (maxVolumeValue > 99999999.99) {
+      return NextResponse.json({ error: 'Cargo volume capacity must not exceed 99,999,999.99 m³' }, { status: 400 });
+    }
+
+    const updateData = {
+      flightNumber: flightNumber.trim(),
+      model: model.trim(),
+      capacity: capacityValue,
+      maxWeightKg: String(maxWeightValue),
+      maxVolumeM3: String(maxVolumeValue),
+      airlineId: Number(airlineId),
+    };
 
     const [updated] = await db
       .update(airplanes)
