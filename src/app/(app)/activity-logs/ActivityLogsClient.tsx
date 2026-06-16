@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { PageTitle } from '@/components/ui/page-title';
 import { apiFetch } from '@/lib/api-client';
+import { TableEmptyState } from '@/components/ui/table-empty-state';
 
 interface ActivityLog {
   id: string;
@@ -435,11 +436,7 @@ export default function ActivityLogsPage() {
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ padding: '40px 14px', textAlign: 'center', fontSize: '12px', color: '#94a3b8' }}>
-                    No activity logs found
-                  </td>
-                </tr>
+                <TableEmptyState colSpan={8} />
               ) : (
                 logs.map((log) => {
                   const actionStyle = getActionBadgeStyle(log.action);

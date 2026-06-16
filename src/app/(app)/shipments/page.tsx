@@ -13,6 +13,8 @@ import { PageTitle } from '@/components/ui/page-title';
 import { apiFetch } from '@/lib/api-client';
 import { printShipmentReceipt } from '@/lib/utils/receipt';
 import { isReportingLocked } from '@/lib/shipments/status-flow';
+import { TableEmptyState } from '@/components/ui/table-empty-state';
+
 
 type Shipment = {
   id: string;
@@ -416,8 +418,11 @@ function ShipmentsContent() {
               </tr>
             </thead>
             <tbody>
-              {shipments.map((s) => {
-                const pKey = s.priority.toUpperCase();
+              {shipments.length === 0 ? (
+                <TableEmptyState colSpan={8} />
+              ) : (
+                shipments.map((s) => {
+                  const pKey = s.priority.toUpperCase();
                 const bgColor = priorityColor[pKey] || '#f1f5f9';
                 const textColor = priorityColor[`${pKey}TEXT`] || '#475569';
                 const statusKey = statusColorKey(s);
@@ -526,7 +531,8 @@ function ShipmentsContent() {
                     </td>
                   </tr>
                 );
-              })}
+              })
+              )}
             </tbody>
           </table>
           <Pagination
