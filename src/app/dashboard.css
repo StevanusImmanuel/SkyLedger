@@ -2075,6 +2075,7 @@
   border: 1px solid #e8edf4;
   margin-bottom: 20px;
   overflow: hidden;
+  min-height: 200px;
 }
 
 .sl-awb-number {
