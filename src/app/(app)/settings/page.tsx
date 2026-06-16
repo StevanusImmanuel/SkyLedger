@@ -364,7 +364,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="sl-settings-workspace-grid">
+            <div className={`sl-settings-workspace-grid ${user?.role !== 'admin' ? 'sl-two-cols' : ''}`}>
               <div className="sl-settings-mini-card">
                 <div className="sl-settings-mini-title">Access Scope</div>
                 <div className="sl-settings-summary-row">
@@ -405,35 +405,37 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="sl-settings-mini-card sl-settings-help-card">
-                <div>
-                  <div className="sl-settings-mini-title">Session &amp; Audit</div>
-                  <div className="sl-settings-summary-row">
-                    <span>Session Status</span>
-                    <strong>Active</strong>
+              {user?.role === 'admin' && (
+                <div className="sl-settings-mini-card sl-settings-help-card">
+                  <div>
+                    <div className="sl-settings-mini-title">Session &amp; Audit</div>
+                    <div className="sl-settings-summary-row">
+                      <span>Session Status</span>
+                      <strong>Active</strong>
+                    </div>
+                    <div className="sl-settings-summary-row">
+                      <span>Last Synced</span>
+                      <strong>Recently synced</strong>
+                    </div>
+                    <div className="sl-settings-summary-row">
+                      <span>Audit Logging</span>
+                      <strong>Enabled</strong>
+                    </div>
+                    <div className="sl-settings-summary-row">
+                      <span>Support Channel</span>
+                      <strong>FAQ Center</strong>
+                    </div>
                   </div>
-                  <div className="sl-settings-summary-row">
-                    <span>Last Synced</span>
-                    <strong>Recently synced</strong>
-                  </div>
-                  <div className="sl-settings-summary-row">
-                    <span>Audit Logging</span>
-                    <strong>Enabled</strong>
-                  </div>
-                  <div className="sl-settings-summary-row">
-                    <span>Support Channel</span>
-                    <strong>FAQ Center</strong>
+                  <div className="sl-settings-action-row">
+                    <Link href="/activity-logs" className="sl-settings-help-link">
+                      Open Activity Logs
+                    </Link>
+                    <Link href="/faq" className="sl-settings-help-link secondary">
+                      Open FAQ
+                    </Link>
                   </div>
                 </div>
-                <div className="sl-settings-action-row">
-                  <Link href="/activity-logs" className="sl-settings-help-link">
-                    Open Activity Logs
-                  </Link>
-                  <Link href="/faq" className="sl-settings-help-link secondary">
-                    Open FAQ
-                  </Link>
-                </div>
-              </div>
+              )}
             </div>
           </section>
         </>

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { shipments } from '@/lib/db/schema';
+import { shipments, airports } from '@/lib/db/schema';
 import { getSessionUser } from '@/lib/auth/session';
-import { gte, count, sum, inArray, and } from 'drizzle-orm';
+import { eq, and, or, ilike, gte, lte, count, sum, inArray, not, SQL } from 'drizzle-orm';
 import { logActivity } from '@/lib/activity-logger';
 
 async function getAuthUser(req: NextRequest) {
@@ -16,8 +16,10 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = request.nextUrl;
-  const daysBack = Math.min(Number(searchParams.get('days') ?? 7), 90);
-  const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+  const search = searchParams.get('search') || '';
+  const airport = searchParams.get('airport') || '';
+  const dateFrom = searchParams.get('dateFrom') || '';
+  const dateTo = searchParams.get('dateTo') || '';
   const format = searchParams.get('format'); // 'csv' or 'pdf'
 
   // Log export activity if format is specified
@@ -30,68 +32,95 @@ export async function GET(request: NextRequest) {
       entityType: 'report',
       details: {
         format,
-        daysBack,
+        search,
+        airport,
+        dateFrom,
+        dateTo,
       },
       request,
     });
   }
 
-  const deliveredStatuses = ['delivered', 'arrived_at_destination', 'out_for_delivery', 'ready_for_pickup'];
+  const conditions: SQL[] = [];
 
-  const [totals] = await db
-    .select({ total: count(), totalWeight: sum(shipments.weightKg) })
-    .from(shipments)
-    .where(
-      and(
-        gte(shipments.createdAt, since),
-        inArray(shipments.deliveryStatus, deliveredStatuses as any)
-      )
+  // Search by AWB, Sender, Receiver (from notes field)
+  if (search) {
+    conditions.push(
+      or(
+        ilike(shipments.awbNumber, `%${search}%`),
+        ilike(shipments.notes, `%${search}%`)
+      )!
     );
+  }
 
-  const byStatus = await db
-    .select({ status: shipments.status, count: count() })
+  // Filter by airport (origin or destination)
+  if (airport && airport !== 'all') {
+    const airportRecord = await db.query.airports.findFirst({
+      where: eq(airports.iataCode, airport),
+    });
+    if (airportRecord) {
+      conditions.push(
+        or(
+          eq(shipments.originAirportId, airportRecord.id),
+          eq(shipments.destAirportId, airportRecord.id)
+        )!
+      );
+    }
+  }
+
+  // Date range filter
+  if (dateFrom) {
+    conditions.push(gte(shipments.createdAt, new Date(dateFrom)));
+  }
+  if (dateTo) {
+    const endDate = new Date(dateTo);
+    endDate.setHours(23, 59, 59, 999);
+    conditions.push(lte(shipments.createdAt, endDate));
+  }
+
+  const baseWhere = conditions.length > 0 ? and(...conditions) : undefined;
+
+  // 1. Total Shipments matching filters
+  const [totalResult] = await db
+    .select({ total: count() })
     .from(shipments)
-    .where(
-      and(
-        gte(shipments.createdAt, since),
-        inArray(shipments.deliveryStatus, deliveredStatuses as any)
-      )
-    )
-    .groupBy(shipments.status);
+    .where(baseWhere);
 
-  const byPriority = await db
-    .select({ priority: shipments.priority, count: count() })
+  // 2. In-Flight (Active: status not in 'delivered', 'closed', 'cancelled') matching filters
+  const activeConditions = [
+    not(inArray(shipments.status, ['delivered', 'closed', 'cancelled']))
+  ];
+  if (baseWhere) activeConditions.push(baseWhere);
+  const [inFlightResult] = await db
+    .select({ inFlight: count() })
     .from(shipments)
-    .where(
-      and(
-        gte(shipments.createdAt, since),
-        inArray(shipments.deliveryStatus, deliveredStatuses as any)
-      )
-    )
-    .groupBy(shipments.priority);
+    .where(and(...activeConditions));
 
-  const recent = await db.query.shipments.findMany({
-    with: { originAirport: true, destAirport: true, flight: true },
-    where: and(
-      gte(shipments.createdAt, since),
-      inArray(shipments.deliveryStatus, deliveredStatuses as any)
-    ),
-    orderBy: (s, { desc }) => [desc(s.createdAt)],
-    limit: 50,
-  });
+  // 3. Arrived (Completed: status in 'delivered', 'closed') matching filters
+  const arrivedConditions = [
+    inArray(shipments.status, ['delivered', 'closed'])
+  ];
+  if (baseWhere) arrivedConditions.push(baseWhere);
+  const [arrivedResult] = await db
+    .select({ arrived: count() })
+    .from(shipments)
+    .where(and(...arrivedConditions));
+
+  // 4. Total Tonnage (Sum of weight in Kg) matching filters
+  const [weightResult] = await db
+    .select({ totalWeight: sum(shipments.weightKg) })
+    .from(shipments)
+    .where(baseWhere);
 
   return NextResponse.json({
     success: true,
     data: {
       summary: {
-        total: totals.total,
-        totalWeightKg: totals.totalWeight ?? '0',
-        onTime: byStatus.find((s) => s.status === 'delivered')?.count ?? 0,
-        delayed: byStatus.find((s) => s.status === 'delayed')?.count ?? 0,
+        total: totalResult?.total || 0,
+        inFlight: inFlightResult?.inFlight || 0,
+        arrived: arrivedResult?.arrived || 0,
+        totalWeightKg: weightResult?.totalWeight || '0',
       },
-      byStatus,
-      byPriority,
-      shipments: recent,
     },
   });
 }

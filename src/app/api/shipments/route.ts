@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { searchParams } = request.nextUrl;
-    const statusFilter = searchParams.get('status') as typeof shipments.$inferSelect.status | null;
+    const statusFilter = searchParams.get('status');
     const deliveryStatusFilter = searchParams.get('deliveryStatus');
     const search = searchParams.get('search') || '';
     const airport = searchParams.get('airport') || '';
@@ -108,7 +108,12 @@ export async function GET(request: NextRequest) {
     const conditions: SQL[] = [];
 
     if (statusFilter) {
-      conditions.push(eq(shipments.status, statusFilter));
+      if (statusFilter.includes(',')) {
+        const statuses = statusFilter.split(',') as typeof shipments.$inferSelect.status[];
+        conditions.push(inArray(shipments.status, statuses));
+      } else {
+        conditions.push(eq(shipments.status, statusFilter as typeof shipments.$inferSelect.status));
+      }
     }
 
     if (deliveryStatusFilter) {
@@ -499,6 +504,7 @@ export async function POST(request: NextRequest) {
         }),
         createdBy: user.id,
         estimatedDelivery: shippingDate ? new Date(new Date(shippingDate).getTime() + 3 * 24 * 60 * 60 * 1000) : undefined,
+        actualDelivery: (shipmentStatus === 'delivered' || shipmentStatus === 'closed' || shipmentStatus === 'cancelled') ? new Date() : undefined,
       })
       .returning();
 
