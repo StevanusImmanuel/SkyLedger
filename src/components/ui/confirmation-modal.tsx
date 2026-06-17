@@ -13,6 +13,7 @@ type ConfirmationModalProps = {
   cancelText?: string;
   variant?: 'create' | 'update' | 'delete' | 'default' | 'deactivate';
   isLoading?: boolean;
+  error?: string | null;
 };
 
 export function ConfirmationModal({
@@ -25,6 +26,7 @@ export function ConfirmationModal({
   cancelText = 'Cancel',
   variant = 'create',
   isLoading = false,
+  error = null,
 }: ConfirmationModalProps) {
   if (!isOpen) return null;
 
@@ -90,6 +92,22 @@ export function ConfirmationModal({
             <X size={20} strokeWidth={2.5} />
           </button>
         </div>
+
+        {/* Error Alert Box */}
+        {error && (
+          <div style={{
+            margin: '16px 24px 0 24px',
+            padding: '10px 14px',
+            background: '#fee2e2',
+            border: '1px solid #ef4444',
+            borderRadius: 8,
+            color: '#b91c1c',
+            fontSize: 12,
+            fontWeight: 600
+          }}>
+            {error}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3 p-6">

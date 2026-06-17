@@ -43,13 +43,20 @@ export async function POST(request: NextRequest) {
       }
 
       const user = await db.query.users.findFirst({ where: eq(users.email, parsed.data.email) });
-      if (!user || !user.isActive) {
+      if (!user) {
         return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
       }
 
       const valid = await verifyPassword(parsed.data.password, user.passwordHash);
       if (!valid) {
         return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+      }
+
+      if (!user.isActive) {
+        return NextResponse.json(
+          { error: 'Your account has been deactivated. Please contact your administrator.' },
+          { status: 403 }
+        );
       }
 
       const ip = request.headers.get('x-forwarded-for') ?? undefined;

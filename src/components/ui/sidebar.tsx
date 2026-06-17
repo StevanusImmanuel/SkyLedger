@@ -98,6 +98,10 @@ export function SessionNavBar() {
     const fetchUser = async () => {
       try {
         const response = await fetch('/api/users?me=true');
+        if (response.status === 401) {
+          window.location.href = '/login/restricted';
+          return;
+        }
         if (response.ok) {
           const data = await response.json();
           setUser(data.data);

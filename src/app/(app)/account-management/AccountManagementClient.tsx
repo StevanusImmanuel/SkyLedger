@@ -242,6 +242,7 @@ export default function AccountManagementClient() {
 
   async function handleDeactivate(user: ManagedUser) {
     setUserToDeactivate(user);
+    setError(null);
     setShowDeactivateModal(true);
   }
 
@@ -276,6 +277,7 @@ export default function AccountManagementClient() {
 
   async function handleDelete(user: ManagedUser) {
     setUserToDelete(user);
+    setError(null);
     setShowDeleteModal(true);
   }
 
@@ -570,6 +572,20 @@ export default function AccountManagementClient() {
             </div>
 
             <div style={{ display: 'grid', gap: 14, padding: 20 }}>
+              {error && (
+                <div style={{
+                  padding: '10px 14px',
+                  background: '#fee2e2',
+                  border: '1px solid #ef4444',
+                  borderRadius: 8,
+                  color: '#b91c1c',
+                  fontSize: 12,
+                  fontWeight: 600
+                }}>
+                  {error}
+                </div>
+              )}
+
               <label>
                 <span className="sl-filter-label">Name</span>
                 <input
@@ -694,6 +710,7 @@ export default function AccountManagementClient() {
         onClose={() => {
           setShowDeleteModal(false);
           setUserToDelete(null);
+          setError(null);
         }}
         onConfirm={confirmDelete}
         title="Permanently Delete User"
@@ -702,12 +719,16 @@ export default function AccountManagementClient() {
         cancelText="Cancel"
         variant="delete"
         isLoading={isSaving}
+        error={error}
       />
 
       {/* Edit Confirmation Modal */}
       <ConfirmationModal
         isOpen={showEditConfirmModal}
-        onClose={() => setShowEditConfirmModal(false)}
+        onClose={() => {
+          setShowEditConfirmModal(false);
+          setError(null);
+        }}
         onConfirm={confirmSubmit}
         title="Confirm User Update"
         description={`Are you sure you want to update ${editingUser?.name}'s account information?`}
@@ -715,6 +736,7 @@ export default function AccountManagementClient() {
         cancelText="Cancel"
         variant="default"
         isLoading={isSaving}
+        error={error}
       />
 
       {/* Deactivate Confirmation Modal */}
@@ -723,6 +745,7 @@ export default function AccountManagementClient() {
         onClose={() => {
           setShowDeactivateModal(false);
           setUserToDeactivate(null);
+          setError(null);
         }}
         onConfirm={confirmDeactivate}
         title="Deactivate User"
@@ -731,6 +754,7 @@ export default function AccountManagementClient() {
         cancelText="Cancel"
         variant="deactivate"
         isLoading={isSaving}
+        error={error}
       />
     </div>
   );
