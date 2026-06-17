@@ -40,10 +40,14 @@ export async function loginAction(_prev: unknown, formData: FormData) {
     where: eq(users.email, parsed.data.email),
   });
 
-  if (!user || !user.isActive) return { error: 'Invalid credentials' };
+  if (!user) return { error: 'Invalid credentials' };
 
   const valid = await verifyPassword(parsed.data.password, user.passwordHash);
   if (!valid) return { error: 'Invalid credentials' };
+
+  if (!user.isActive) {
+    return { error: 'Your account has been deactivated. Please contact your administrator.' };
+  }
 
   const hdrs = await headers();
   const ip = hdrs.get('x-forwarded-for') ?? hdrs.get('x-real-ip') ?? undefined;
